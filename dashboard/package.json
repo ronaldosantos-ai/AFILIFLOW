@@ -15,6 +15,7 @@
     "test": "vitest run",
     "migrate": "node scripts/migrate.cjs",
     "authorize-admin": "node scripts/authorize-admin.cjs",
+    "create-integration-settings": "node scripts/create-integration-settings.cjs",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
   },
   "dependencies": {
