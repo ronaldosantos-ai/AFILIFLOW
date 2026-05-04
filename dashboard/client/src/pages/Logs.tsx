@@ -1,217 +1,336 @@
-import DashboardLayout from "@/components/DashboardLayout";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle, AlertCircle, Clock, Download, RefreshCw } from "lucide-react";
-import { useState } from "react";
-
-const mockLogs = [
-  {
-    id: "exec-001",
-    timestamp: "2026-04-21T14:30:00Z",
-    status: "success",
-    productFound: "Fone de Ouvido Bluetooth",
-    channelsPublished: ["telegram", "instagram"],
-    executionTime: 2340,
-  },
-  {
-    id: "exec-002",
-    timestamp: "2026-04-21T13:00:00Z",
-    status: "success",
-    productFound: "Luminária LED Inteligente",
-    channelsPublished: ["telegram", "instagram", "facebook"],
-    executionTime: 3120,
-  },
-  {
-    id: "exec-003",
-    timestamp: "2026-04-21T11:30:00Z",
-    status: "error",
-    productFound: null,
-    channelsPublished: [],
-    errorMessage: "Falha ao conectar com API Shopee",
-    executionTime: 5000,
-  },
-  {
-    id: "exec-004",
-    timestamp: "2026-04-21T10:00:00Z",
-    status: "partial",
-    productFound: "Tapete de Yoga",
-    channelsPublished: ["telegram"],
-    errorMessage: "Falha ao publicar no Instagram",
-    executionTime: 4200,
-  },
-  {
-    id: "exec-005",
-    timestamp: "2026-04-21T09:00:00Z",
-    status: "success",
-    productFound: "Sérum Facial Vitamina C",
-    channelsPublished: ["telegram", "instagram"],
-    executionTime: 2890,
-  },
-];
-
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case "success":
-      return <CheckCircle className="w-5 h-5 text-accent" />;
-    case "error":
-      return <AlertCircle className="w-5 h-5 text-destructive" />;
-    case "partial":
-      return <Clock className="w-5 h-5 text-yellow-500" />;
-    default:
-      return null;
-  }
-};
-
-const getStatusLabel = (status: string) => {
-  switch (status) {
-    case "success":
-      return "Sucesso";
-    case "error":
-      return "Erro";
-    case "partial":
-      return "Parcial";
-    default:
-      return status;
-  }
-};
-
-const getStatusBadgeClass = (status: string) => {
-  switch (status) {
-    case "success":
-      return "bg-accent/10 text-accent border-accent/20";
-    case "error":
-      return "bg-destructive/10 text-destructive border-destructive/20";
-    case "partial":
-      return "bg-yellow-500/10 text-yellow-600 border-yellow-500/20";
-    default:
-      return "bg-muted text-muted-foreground border-muted";
-  }
-};
-
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  return date.toLocaleString("pt-BR");
-};
-
-const formatExecutionTime = (ms: number) => {
-  return `${(ms / 1000).toFixed(2)}s`;
-};
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import DashboardLayout from "@/components/DashboardLayout";
+import { trpc } from "@/lib/trpc";
+import {
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  Download,
+  RefreshCw,
+  Loader2,
+  User,
+  FileText,
+  Calendar,
+} from "lucide-react";
 
 export default function Logs() {
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [filterType, setFilterType] = useState<string>("");
+  const [filterUser, setFilterUser] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [searchText, setSearchText] = useState<string>("");
+
+  const logsQuery = trpc.admin.getAuditLogs.useQuery();
+  const logs = logsQuery.data || [];
+
+  // Filter logs based on criteria
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log: any) => {
+      const matchType = !filterType || log.actionType === filterType;
+      const matchUser = !filterUser || log.userId?.toString() === filterUser;
+      const matchStatus = !filterStatus || log.status === filterStatus;
+      const matchSearch =
+        !searchText ||
+        log.description?.toLowerCase().includes(searchText.toLowerCase()) ||
+        log.actionType?.toLowerCase().includes(searchText.toLowerCase());
+
+      return matchType && matchUser && matchStatus && matchSearch;
+    });
+  }, [logs, filterType, filterUser, filterStatus, searchText]);
+
+  const formatDate = (date: any) => {
+    if (!date) return "N/A";
+    const d = new Date(date);
+    return d.toLocaleDateString("pt-BR", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  };
+
+  const getActionIcon = (actionType: string) => {
+    switch (actionType) {
+      case "APPROVE_CONTENT":
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case "REJECT_CONTENT":
+        return <AlertCircle className="w-4 h-4 text-red-500" />;
+      case "EDIT_CONTENT":
+        return <FileText className="w-4 h-4 text-blue-500" />;
+      case "AUTHORIZE_USER":
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case "REJECT_USER":
+        return <AlertCircle className="w-4 h-4 text-red-500" />;
+      case "PROMOTE_ADMIN":
+        return <User className="w-4 h-4 text-purple-500" />;
+      default:
+        return <Clock className="w-4 h-4 text-gray-500" />;
+    }
+  };
+
+  const getActionLabel = (actionType: string) => {
+    const labels: Record<string, string> = {
+      APPROVE_CONTENT: "Aprovação de Conteúdo",
+      REJECT_CONTENT: "Rejeição de Conteúdo",
+      EDIT_CONTENT: "Edição de Conteúdo",
+      AUTHORIZE_USER: "Autorização de Usuário",
+      REJECT_USER: "Rejeição de Usuário",
+      PROMOTE_ADMIN: "Promoção a Admin",
+      PUBLISH_TELEGRAM: "Publicação Telegram",
+      PUBLISH_INSTAGRAM: "Publicação Instagram",
+      SAVE_CONFIG: "Salvamento de Configuração",
+      SAVE_INTEGRATION: "Salvamento de Integração",
+    };
+    return labels[actionType] || actionType;
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "success":
+        return <Badge className="bg-green-600">✓ Sucesso</Badge>;
+      case "error":
+        return <Badge className="bg-red-600">✗ Erro</Badge>;
+      case "pending":
+        return <Badge className="bg-yellow-600">⏳ Pendente</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const uniqueUsers = Array.from(
+    new Set(logs.map((log: any) => log.userId?.toString()).filter(Boolean))
+  );
+  const uniqueTypes = Array.from(new Set(logs.map((log: any) => log.actionType).filter(Boolean)));
+
+  const handleExportCSV = () => {
+    const csv = [
+      ["Data", "Usuário", "Ação", "Descrição", "Status"],
+      ...filteredLogs.map((log: any) => [
+        formatDate(log.createdAt),
+        log.userId || "Sistema",
+        getActionLabel(log.actionType),
+        log.description || "",
+        log.status || "N/A",
+      ]),
+    ]
+      .map((row) => row.map((cell) => `"${cell}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `auditoria-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+  };
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Logs de Execução</h1>
-            <p className="text-muted-foreground mt-1">Histórico em tempo real do pipeline</p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant={autoRefresh ? "default" : "outline"}
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={autoRefresh ? "bg-accent hover:bg-accent/90" : "border-border"}
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              {autoRefresh ? "Auto-atualização" : "Atualizar"}
-            </Button>
-            <Button variant="outline" className="border-border">
-              <Download className="w-4 h-4 mr-2" />
-              Exportar
-            </Button>
-          </div>
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Auditoria e Logs</h1>
+          <p className="text-muted-foreground mt-1">Visualize todas as ações realizadas no sistema</p>
         </div>
 
-        {/* Logs Table */}
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total de Ações</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">{logs.length}</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Sucesso</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-600">
+                {logs.filter((l: any) => l.status === "success").length}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Erros</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-red-600">
+                {logs.filter((l: any) => l.status === "error").length}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Filtrados</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-foreground">{filteredLogs.length}</div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filters */}
         <Card className="bg-card border-border">
           <CardHeader>
-            <CardTitle>Histórico de Execuções</CardTitle>
-            <CardDescription>Últimas execuções do pipeline</CardDescription>
+            <CardTitle className="text-sm">Filtros</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b border-border">
-                  <tr className="text-muted-foreground">
-                    <th className="text-left py-3 px-4 font-medium">Status</th>
-                    <th className="text-left py-3 px-4 font-medium">Timestamp</th>
-                    <th className="text-left py-3 px-4 font-medium">Produto</th>
-                    <th className="text-left py-3 px-4 font-medium">Canais</th>
-                    <th className="text-left py-3 px-4 font-medium">Tempo</th>
-                    <th className="text-left py-3 px-4 font-medium">Detalhes</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {mockLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(log.status)}
-                          <span className="text-foreground">{getStatusLabel(log.status)}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground">
-                        {formatDate(log.timestamp)}
-                      </td>
-                      <td className="py-3 px-4 text-foreground">
-                        {log.productFound || "-"}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex flex-wrap gap-1">
-                          {log.channelsPublished.length > 0 ? (
-                            log.channelsPublished.map((channel) => (
-                              <Badge key={channel} variant="secondary" className="text-xs">
-                                {channel === "telegram" && "📱"}
-                                {channel === "instagram" && "📷"}
-                                {channel === "facebook" && "👍"}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-muted-foreground text-xs">-</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground">
-                        {formatExecutionTime(log.executionTime)}
-                      </td>
-                      <td className="py-3 px-4">
-                        {log.errorMessage && (
-                          <div className="text-xs text-destructive cursor-help" title={log.errorMessage}>
-                            ⚠️ Erro
-                          </div>
-                        )}
-                      </td>
-                    </tr>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <Label htmlFor="search" className="text-sm font-medium">
+                  Pesquisar
+                </Label>
+                <Input
+                  id="search"
+                  placeholder="Descrição ou ação..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="type" className="text-sm font-medium">
+                  Tipo de Ação
+                </Label>
+                <select
+                  id="type"
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md text-sm"
+                >
+                  <option value="">Todas</option>
+                  {uniqueTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {getActionLabel(type as string)}
+                    </option>
                   ))}
-                </tbody>
-              </table>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="status" className="text-sm font-medium">
+                  Status
+                </Label>
+                <select
+                  id="status"
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 bg-background border border-input rounded-md text-sm"
+                >
+                  <option value="">Todos</option>
+                  <option value="success">Sucesso</option>
+                  <option value="error">Erro</option>
+                  <option value="pending">Pendente</option>
+                </select>
+              </div>
+              <div className="flex items-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => logsQuery.refetch()}
+                  className="flex-1"
+                >
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Atualizar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportCSV}
+                  className="flex-1"
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  Exportar
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Log Details */}
+        {/* Logs Table */}
         <Card className="bg-card border-border">
           <CardHeader>
-            <CardTitle>Últimas Mensagens</CardTitle>
-            <CardDescription>Console de saída do pipeline</CardDescription>
+            <CardTitle>Histórico de Ações</CardTitle>
+            <CardDescription>Todas as ações realizadas no sistema</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="bg-muted/50 rounded-lg p-4 font-mono text-xs text-muted-foreground space-y-1 max-h-64 overflow-y-auto">
-              <div className="text-accent">[14:30:00] ✅ Pipeline iniciado</div>
-              <div className="text-foreground">[14:30:05] 🔍 Buscando em Eletrônicos...</div>
-              <div className="text-foreground">[14:30:15] ✅ Produto encontrado: Fone de Ouvido Bluetooth</div>
-              <div className="text-foreground">[14:30:20] 🎨 Gerando imagem com IA...</div>
-              <div className="text-foreground">[14:30:35] ✅ Imagem gerada com sucesso</div>
-              <div className="text-foreground">[14:30:40] 📱 Publicando no Telegram...</div>
-              <div className="text-accent">[14:30:42] ✅ Publicado no Telegram</div>
-              <div className="text-foreground">[14:30:45] 📷 Publicando no Instagram...</div>
-              <div className="text-accent">[14:30:50] ✅ Publicado no Instagram</div>
-              <div className="text-accent">[14:30:52] ✅ Pipeline finalizado com sucesso</div>
-            </div>
+            {logsQuery.isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : filteredLogs.length > 0 ? (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {filteredLogs.map((log: any, index: number) => (
+                  <div
+                    key={log.id || index}
+                    className="p-3 border border-border rounded-lg hover:bg-accent/50 transition"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className="mt-1">{getActionIcon(log.actionType)}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm">
+                              {getActionLabel(log.actionType)}
+                            </span>
+                            {getStatusBadge(log.status)}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {log.description || "Sem descrição"}
+                          </p>
+                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {formatDate(log.createdAt)}
+                            </div>
+                            {log.userId && (
+                              <div className="flex items-center gap-1">
+                                <User className="w-3 h-3" />
+                                Usuário ID: {log.userId}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">Nenhum log encontrado</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Info */}
+        <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
+          <CardHeader>
+            <CardTitle className="text-sm">ℹ️ Informações</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground space-y-2">
+            <p>
+              • <strong>Auditoria Completa:</strong> Todas as ações são registradas automaticamente
+            </p>
+            <p>
+              • <strong>Rastreabilidade:</strong> Você pode ver quem fez o quê e quando
+            </p>
+            <p>
+              • <strong>Exportação:</strong> Baixe os logs em formato CSV para análise externa
+            </p>
+            <p>
+              • <strong>Filtros:</strong> Use os filtros para encontrar ações específicas
+            </p>
           </CardContent>
         </Card>
       </div>
