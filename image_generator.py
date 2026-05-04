@@ -1,10 +1,11 @@
 """
 image_generator.py
 Gera imagem lifestyle do produto com CTAs e gatilhos de conversão
-usando a API do Gemini (google-genai) com Imagen 3.
+usando a API do Gemini (google-genai) com Imagen 4.
 """
 
 import os
+import base64
 import requests
 import logging
 from io import BytesIO
@@ -13,6 +14,7 @@ from PIL import Image
 from google import genai
 from google.genai import types
 import config
+
 logger = logging.getLogger(__name__)
 
 # Configura o cliente Gemini
@@ -87,7 +89,7 @@ def _download_product_image(image_url: str) -> bytes | None:
         response.raise_for_status()
         return response.content
     except Exception as e:
-        print(f"⚠️  Não foi possível baixar imagem do produto: {e}")
+        logger.warning(f"⚠️  Não foi possível baixar imagem do produto: {e}")
         return None
 
 
@@ -104,18 +106,18 @@ def generate_product_image(
     triggers = _get_triggers(category, rating, reviews)
     prompt = _build_image_prompt(product_title, category_label, price, triggers)
 
-    print(f"🎨 Gerando imagem para: {product_title[:50]}...")
-    print(f"   Gatilhos: {triggers}")
+    logger.info(f"🎨 Gerando imagem para: {product_title[:50]}...")
+    logger.info(f"   Gatilhos: {triggers}")
 
-    result = _generate_with_imagen3(prompt, asin)
+    result = _generate_with_imagen4(prompt, asin)
     if result:
         return result
 
-    print("⚡ Tentando fallback com Gemini Flash Image...")
+    logger.info("⚡ Tentando fallback com Gemini Flash Image...")
     return _generate_with_gemini_flash(prompt, asin, product_image_url)
 
 
-def _generate_with_imagen3(prompt: str, asin: str) -> str | None:
+def _generate_with_imagen4(prompt: str, asin: str) -> str | None:
     try:
         response = client.models.generate_images(
             model="imagen-4.0-generate-001",
@@ -134,14 +136,14 @@ def _generate_with_imagen3(prompt: str, asin: str) -> str | None:
             img = Image.open(BytesIO(image_bytes))
             img = img.convert("RGB")
             img.save(output_path, "JPEG", quality=92)
-            print(f"✅ Imagem gerada (Imagen 3): {output_path}")
+            logger.info(f"✅ Imagem gerada (Imagen 4): {output_path}")
             return output_path
 
-        print("❌ Imagen 3: Nenhuma imagem retornada.")
+        logger.warning("❌ Imagen 4: Nenhuma imagem retornada.")
         return None
 
     except Exception as e:
-        print(f"❌ Erro ao gerar imagem com Imagen 3: {e}")
+        logger.error(f"❌ Erro ao gerar imagem com Imagen 4: {e}")
         return None
 
 
@@ -176,14 +178,51 @@ def _generate_with_gemini_flash(prompt: str, asin: str,
                 img_bytes = part.inline_data.data
                 with open(output_path, "wb") as f:
                     f.write(img_bytes)
-                print(f"✅ Imagem (fallback) gerada: {output_path}")
+                logger.info(f"✅ Imagem (fallback) gerada: {output_path}")
                 return output_path
 
-        print("❌ Fallback: sem imagem na resposta.")
+        logger.warning("❌ Fallback: sem imagem na resposta.")
         return None
 
     except Exception as e:
-        print(f"❌ Fallback também falhou: {e}")
+        logger.error(f"❌ Fallback também falhou: {e}")
+        return None
+
+
+def get_public_image_url(image_path: str) -> str | None:
+    """
+    Faz upload da imagem para o Imgur e retorna a URL pública.
+    Imgur aceita uploads anônimos sem autenticação.
+    """
+    if not image_path or not os.path.exists(image_path):
+        logger.error(f"❌ Imagem não encontrada: {image_path}")
+        return None
+
+    try:
+        with open(image_path, "rb") as f:
+            image_data = f.read()
+
+        b64_image = base64.b64encode(image_data).decode("utf-8")
+
+        response = requests.post(
+            "https://api.imgur.com/3/image",
+            headers={"Authorization": "Client-ID 546c25a59c58ad7"},
+            data={"image": b64_image, "type": "base64"},
+            timeout=30,
+        )
+
+        result = response.json()
+
+        if result.get("success"):
+            url = result["data"]["link"]
+            logger.info(f"✅ Imagem uploaded para Imgur: {url}")
+            return url
+        else:
+            logger.error(f"❌ Imgur upload falhou: {result}")
+            return None
+
+    except Exception as e:
+        logger.error(f"❌ Erro ao fazer upload para Imgur: {e}")
         return None
 
 
@@ -209,33 +248,6 @@ def cleanup_image(image_path: str):
     try:
         if image_path and os.path.exists(image_path):
             os.remove(image_path)
-            print(f"🗑️  Imagem temporária removida: {image_path}")
+            logger.info(f"🗑️  Imagem temporária removida: {image_path}")
     except Exception as e:
-        print(f"⚠️  Não foi possível remover {image_path}: {e}")
-
-
-def get_public_image_url(image_path: str) -> str | None:
-    """
-    Faz upload da imagem gerada para um serviço de armazenamento público e retorna a URL.
-    """
-    try:
-        # Usar manus-upload-file para fazer o upload e obter a URL pública
-        # O resultado do manus-upload-file é uma string JSON com as URLs
-        import subprocess
-        command = ["manus-upload-file", image_path]
-        process = subprocess.run(command, capture_output=True, text=True, check=True)
-        output = process.stdout.strip()
-        
-        # O output é uma string JSON, precisamos parseá-la
-        import json
-        urls = json.loads(output)
-        
-        if urls and isinstance(urls, list) and len(urls) > 0:
-            logger.info(f"✅ Imagem {image_path} uploaded. URL pública: {urls[0]}")
-            return urls[0]
-        else:
-            logger.error(f"❌ manus-upload-file não retornou URL pública para {image_path}: {output}")
-            return None
-    except Exception as e:
-        logger.error(f"❌ Erro ao fazer upload da imagem {image_path}: {e}")
-        return None
+        logger.warning(f"⚠️  Não foi possível remover {image_path}: {e}")
