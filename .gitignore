@@ -1,1 +1,49 @@
-.env 
+# Ambiente
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pycache
+.Python
+env/
+venv/
+.venv/
+
+# Imagens geradas
+generated_*.jpg
+generated_*.png
+
+# Cache e logs
+published_cache.json
+bot.log
+*.log
+
+# Node
+node_modules/
+dashboard/node_modules/
+
+# Build
+dist/
+dashboard/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Arquivos temporários
+_tmp_pkg/
+_creators_sdk_inspect/
+cd
+python
+git
+main
