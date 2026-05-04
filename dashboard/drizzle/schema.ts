@@ -176,6 +176,8 @@ export const integrationSettings = mysqlTable("integrationSettings", {
   shopeePartnerId: varchar("shopeePartnerId", { length: 255 }),
   // GTM
   gtmId: varchar("gtmId", { length: 255 }),
+  // Gemini
+  geminiApiKey: varchar("geminiApiKey", { length: 255 }),
   // Status
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

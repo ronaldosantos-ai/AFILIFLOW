@@ -187,6 +187,7 @@ export const appRouter = router({
             shopeeApiKey VARCHAR(255),
             shopeePartnerId VARCHAR(255),
             gtmId VARCHAR(255),
+            geminiApiKey VARCHAR(255),
             isActive BOOLEAN DEFAULT true NOT NULL,
             createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
             updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,

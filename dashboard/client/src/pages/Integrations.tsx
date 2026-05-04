@@ -50,6 +50,13 @@ const INTEGRATIONS = [
     icon: "📊",
     fields: [{ key: "gtmId", label: "GTM ID", isSecret: false, required: true }],
   },
+  {
+    id: "gemini",
+    name: "Google Gemini",
+    description: "Configure Gemini para gerar descrições AIDA e editar conteúdo",
+    icon: "✨",
+    fields: [{ key: "geminiApiKey", label: "API Key", isSecret: true, required: true }],
+  },
 ];
 
 export default function Integrations() {
@@ -83,7 +90,8 @@ export default function Integrations() {
         'metaAppId', 'metaAppSecret', 'metaPageAccessToken', 'metaPageId', 'metaInstagramAccountId',
         'telegramBotToken', 'telegramChatId',
         'shopeeApiKey', 'shopeePartnerId',
-        'gtmId'
+        'gtmId',
+        'geminiApiKey'
       ];
       
       configKeys.forEach(key => {
