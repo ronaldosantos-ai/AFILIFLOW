@@ -81,6 +81,7 @@ export default function Integrations() {
 
   // Carregar dados salvos quando a query retorna
   useEffect(() => {
+    console.log('Query state:', { data: getSettingsQuery.data, isLoading: getSettingsQuery.isLoading, error: getSettingsQuery.error });
     if (getSettingsQuery.data) {
       const data = getSettingsQuery.data;
       const newFormData: Record<string, any> = {};
