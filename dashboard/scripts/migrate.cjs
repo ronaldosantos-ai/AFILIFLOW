@@ -83,6 +83,32 @@ async function run() {
     await addColumnIfMissing("updatedAt",    "`updatedAt`    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
     await addColumnIfMissing("lastSignedIn", "`lastSignedIn` TIMESTAMP    NULL");
 
+// ------------------------------------------------------------------
+// 3. Create integrationSettings table if it doesn't exist
+// ------------------------------------------------------------------
+await connection.execute(`
+  CREATE TABLE IF NOT EXISTS \`integrationSettings\` (
+    \`id\`                     INT          NOT NULL AUTO_INCREMENT,
+    \`integrationName\`        VARCHAR(64)  NOT NULL,
+    \`metaAppId\`              VARCHAR(255) NULL,
+    \`metaAppSecret\`          VARCHAR(255) NULL,
+    \`metaPageAccessToken\`    VARCHAR(255) NULL,
+    \`metaPageId\`             VARCHAR(255) NULL,
+    \`metaInstagramAccountId\` VARCHAR(255) NULL,
+    \`telegramBotToken\`       VARCHAR(255) NULL,
+    \`telegramChatId\`         VARCHAR(255) NULL,
+    \`shopeeApiKey\`           VARCHAR(255) NULL,
+    \`shopeePartnerId\`        VARCHAR(255) NULL,
+    \`gtmId\`                  VARCHAR(255) NULL,
+    \`isActive\`               TINYINT(1)   NOT NULL DEFAULT 1,
+    \`createdAt\`              TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    \`updatedAt\`              TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (\`id\`),
+    UNIQUE KEY \`integrationSettings_name_unique\` (\`integrationName\`)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+`);
+console.log("[migrate] ✔ integrationSettings table exists (created or already present).");
+
     console.log("[migrate] Migration completed successfully.");
   } catch (err) {
     console.error("[migrate] Migration failed:", err);
