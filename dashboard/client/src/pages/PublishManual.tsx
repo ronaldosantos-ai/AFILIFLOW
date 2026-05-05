@@ -20,6 +20,7 @@ export default function PublishManual() {
   const getMyPostsQuery = trpc.dashboard.getMyManualPosts.useQuery();
   const updatePostMutation = trpc.dashboard.updateManualPost.useMutation();
   const deletePostMutation = trpc.dashboard.deleteManualPost.useMutation();
+  const processUrlMutation = trpc.dashboard.processProductUrl.useMutation();
 
   const handleSearchProduct = async () => {
     if (!productUrl.trim()) {
@@ -37,14 +38,30 @@ export default function PublishManual() {
         return;
       }
 
-      // Criar post em draft
+      // Processar URL e gerar conteúdo
+      toast.loading("Buscando dados do produto...");
+      const contentData = await processUrlMutation.mutateAsync({ url: productUrl });
+
+      // Criar post com dados gerados
       const result = await createPostMutation.mutateAsync({
         productUrl,
-        productName: "Carregando...",
+        productName: contentData.productName,
+        productPrice: contentData.productPrice,
+        productImage: contentData.productImage,
+        productDescription: contentData.productDescription,
       });
 
       if (result) {
-        toast.success("Produto adicionado! Gerando conteúdo...");
+        // Atualizar post com conteúdo gerado
+        const postId = (result as any).insertId || 1;
+        await updatePostMutation.mutateAsync({
+          id: postId,
+          aidaDescription: contentData.aidaDescription,
+          generatedImage: contentData.generatedImage,
+          status: "draft",
+        });
+
+        toast.success("Produto processado! Conteúdo gerado com sucesso!");
         setProductUrl("");
         await getMyPostsQuery.refetch();
       }

@@ -21,6 +21,7 @@ import { registerUser, loginUser, getPendingUsers, authorizeUser, rejectUser } f
 import type { User } from "../drizzle/schema";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
+import { processProductUrl } from "./contentGenerator";
 
 /**
  * Serialize a User record for safe transmission to the frontend.
@@ -300,6 +301,19 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return await deleteManualPost(input.id);
+      }),
+
+    processProductUrl: protectedProcedure
+      .input(z.object({ url: z.string().url() }))
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.user) throw new Error('Not authenticated');
+        try {
+          const result = await processProductUrl(input.url);
+          return result;
+        } catch (error) {
+          console.error('Error processing product URL:', error);
+          throw new Error(error instanceof Error ? error.message : 'Failed to process product URL');
+        }
       }),
   }),
 });
