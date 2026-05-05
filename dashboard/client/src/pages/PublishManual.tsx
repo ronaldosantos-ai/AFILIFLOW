@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Loader2, Search, Trash2, Eye, Edit2 } from "lucide-react";
+import { Loader2, Search, Trash2, Edit2, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export default function PublishManual() {
@@ -15,6 +15,7 @@ export default function PublishManual() {
   const [isSearching, setIsSearching] = useState(false);
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [editMode, setEditMode] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   const createPostMutation = trpc.dashboard.createManualPost.useMutation();
   const getMyPostsQuery = trpc.dashboard.getMyManualPosts.useQuery();
@@ -30,7 +31,6 @@ export default function PublishManual() {
 
     setIsSearching(true);
     try {
-      // Validar URL
       try {
         new URL(productUrl);
       } catch {
@@ -38,11 +38,9 @@ export default function PublishManual() {
         return;
       }
 
-      // Processar URL e gerar conteúdo
       toast.loading("Buscando dados do produto...");
       const contentData = await processUrlMutation.mutateAsync({ url: productUrl });
 
-      // Criar post com dados gerados
       const result = await createPostMutation.mutateAsync({
         productUrl,
         productName: contentData.productName,
@@ -52,7 +50,6 @@ export default function PublishManual() {
       });
 
       if (result) {
-        // Atualizar post com conteúdo gerado
         const postId = (result as any).insertId || 1;
         await updatePostMutation.mutateAsync({
           id: postId,
@@ -92,13 +89,36 @@ export default function PublishManual() {
       await updatePostMutation.mutateAsync({
         id: selectedPost.id,
         editedDescription: selectedPost.editedDescription || selectedPost.aidaDescription,
-        status: "pending",
+        status: "draft",
       });
       toast.success("Post salvo!");
       setEditMode(false);
       await getMyPostsQuery.refetch();
     } catch (error) {
       toast.error("Erro ao salvar post");
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!selectedPost || !selectedPost.publishChannels?.length) {
+      toast.error("Selecione pelo menos um canal de publicação");
+      return;
+    }
+
+    setIsPublishing(true);
+    try {
+      await updatePostMutation.mutateAsync({
+        id: selectedPost.id,
+        status: "pending",
+        publishChannels: selectedPost.publishChannels,
+      });
+      toast.success("Post enviado para aprovação!");
+      setSelectedPost(null);
+      await getMyPostsQuery.refetch();
+    } catch (error) {
+      toast.error("Erro ao publicar post");
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -216,26 +236,15 @@ export default function PublishManual() {
                 <CardTitle>{selectedPost.productName}</CardTitle>
                 <CardDescription>ID: {selectedPost.id}</CardDescription>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => setEditMode(!editMode)}
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                >
-                  <Edit2 className="w-4 h-4" />
-                  {editMode ? "Cancelar" : "Editar"}
-                </Button>
-                <Button
-                  onClick={() => handleDeletePost(selectedPost.id)}
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 text-red-600 hover:text-red-700"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Deletar
-                </Button>
-              </div>
+              <Button
+                onClick={() => handleDeletePost(selectedPost.id)}
+                variant="outline"
+                size="sm"
+                className="gap-2 text-red-600 hover:text-red-700"
+              >
+                <Trash2 className="w-4 h-4" />
+                Deletar
+              </Button>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Product Info */}
@@ -279,10 +288,23 @@ export default function PublishManual() {
               )}
 
               {/* Description */}
-              <div>
-                <Label className="text-xs font-semibold text-muted-foreground">
-                  Descrição {editMode ? "(Editável)" : ""}
-                </Label>
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-xs font-semibold text-muted-foreground">
+                    Descrição {editMode ? "(Editável)" : ""}
+                  </Label>
+                  {!editMode && (
+                    <Button
+                      onClick={() => setEditMode(true)}
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 h-auto p-1"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                      Editar
+                    </Button>
+                  )}
+                </div>
                 {editMode ? (
                   <Textarea
                     value={selectedPost.editedDescription || selectedPost.aidaDescription || ""}
@@ -292,27 +314,23 @@ export default function PublishManual() {
                         editedDescription: e.target.value,
                       })
                     }
-                    className="mt-2 min-h-32"
+                    className="min-h-32"
                     placeholder="Edite a descrição aqui..."
                   />
                 ) : (
-                  <p className="mt-2 text-sm text-foreground whitespace-pre-wrap">
+                  <p className="text-sm text-foreground whitespace-pre-wrap bg-muted p-3 rounded-lg">
                     {selectedPost.editedDescription || selectedPost.aidaDescription || "Aguardando geração..."}
                   </p>
                 )}
               </div>
 
               {/* Publish Channels */}
-              <div>
-                <Label className="text-xs font-semibold text-muted-foreground">Canais de Publicação</Label>
-                <div className="flex gap-2 mt-2">
+              <div className="border-t pt-4">
+                <Label className="text-xs font-semibold text-muted-foreground mb-3 block">Canais de Publicação</Label>
+                <div className="flex gap-2 flex-wrap">
                   {["telegram", "instagram"].map((channel) => (
-                    <Badge
+                    <button
                       key={channel}
-                      variant={
-                        selectedPost.publishChannels?.includes(channel) ? "default" : "outline"
-                      }
-                      className="cursor-pointer"
                       onClick={() => {
                         const channels = selectedPost.publishChannels || [];
                         if (channels.includes(channel)) {
@@ -327,19 +345,56 @@ export default function PublishManual() {
                           });
                         }
                       }}
+                      className={`px-4 py-2 rounded-lg border transition ${
+                        selectedPost.publishChannels?.includes(channel)
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-card border-border hover:border-blue-400"
+                      }`}
                     >
                       {channel === "telegram" ? "📱 Telegram" : "📷 Instagram"}
-                    </Badge>
+                    </button>
                   ))}
                 </div>
               </div>
 
               {/* Action Buttons */}
-              {editMode && (
-                <Button onClick={handleSavePost} className="w-full bg-green-600 hover:bg-green-700">
-                  Salvar Alterações
-                </Button>
-              )}
+              <div className="flex gap-2 pt-4 border-t">
+                {editMode ? (
+                  <>
+                    <Button
+                      onClick={handleSavePost}
+                      className="flex-1 bg-green-600 hover:bg-green-700"
+                    >
+                      Salvar Alterações
+                    </Button>
+                    <Button
+                      onClick={() => setEditMode(false)}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      Cancelar
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    onClick={handlePublish}
+                    disabled={isPublishing || !selectedPost.publishChannels?.length}
+                    className="w-full bg-green-600 hover:bg-green-700"
+                  >
+                    {isPublishing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Publicando...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4 mr-2" />
+                        Enviar para Aprovação
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         )}
