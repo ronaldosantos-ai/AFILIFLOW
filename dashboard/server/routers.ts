@@ -194,7 +194,19 @@ export const appRouter = router({
             INDEX idx_integrationName (integrationName)
           )
         `);
-        return { success: true, message: 'Table created successfully' };
+        // Add geminiApiKey column if it doesn't exist
+        try {
+          await db.execute(`
+            ALTER TABLE integrationSettings ADD COLUMN geminiApiKey VARCHAR(255) AFTER gtmId
+          `);
+        } catch (e: any) {
+          // Column might already exist, ignore the error
+          if (!e.message?.includes('Duplicate column')) {
+            throw e;
+          }
+        }
+        
+        return { success: true, message: 'Table initialized successfully' };
       } catch (error) {
         console.error('Migration error:', error);
         return { success: false, message: String(error) };
