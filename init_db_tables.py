@@ -1,17 +1,25 @@
+"""
+init_db_tables.py
+Inicializa as tabelas do banco de dados MySQL.
+Usa variáveis de ambiente para conexão — nunca hardcode credenciais.
+"""
+
 import os
-import mysql.connector
-from urllib.parse import urlparse
 import logging
+from urllib.parse import urlparse
+import mysql.connector
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def init_db():
-    db_url = "mysql://root:iTaeDTgRLhlrDcsQtGmkIAbSoHqlaIai@monorail.proxy.rlwy.net:31361/railway"
-    parsed = urlparse(db_url)
-    
-    try:
-        conn = mysql.connector.connect(
+
+def get_connection():
+    """Obtém conexão com o banco usando variáveis de ambiente."""
+    # Tenta DATABASE_URL primeiro
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        parsed = urlparse(database_url)
+        return mysql.connector.connect(
             host=parsed.hostname,
             port=parsed.port or 3306,
             user=parsed.username,
@@ -19,11 +27,34 @@ def init_db():
             database=parsed.path.lstrip('/'),
             autocommit=True
         )
+
+    # Tenta variáveis individuais do Railway MySQL
+    host = os.getenv("MYSQLHOST") or os.getenv("MYSQL_HOST")
+    port = int(os.getenv("MYSQLPORT") or os.getenv("MYSQL_PORT") or 3306)
+    user = os.getenv("MYSQLUSER") or os.getenv("MYSQL_USER") or "root"
+    password = os.getenv("MYSQLPASSWORD") or os.getenv("MYSQL_PASSWORD") or os.getenv("MYSQL_ROOT_PASSWORD")
+    database = os.getenv("MYSQLDATABASE") or os.getenv("MYSQL_DATABASE") or "railway"
+
+    if not host or not password:
+        raise Exception("Nenhuma variável de banco de dados encontrada (DATABASE_URL, MYSQLHOST, etc.)")
+
+    return mysql.connector.connect(
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database,
+        autocommit=True
+    )
+
+
+def init_db():
+    """Cria todas as tabelas necessárias se não existirem."""
+    try:
+        conn = get_connection()
         cursor = conn.cursor()
-        
         logger.info("🚀 Criando tabelas no banco de dados...")
-        
-        # Tabela de Posts
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS posts (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -33,13 +64,12 @@ def init_db():
             imageUrl TEXT,
             affiliateUrl TEXT,
             category VARCHAR(100),
-            status ENUM('published', 'failed') DEFAULT 'published',
+            status ENUM('published', 'failed', 'pending') DEFAULT 'published',
             channelsPublished JSON,
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
         )
         """)
-        
-        # Tabela de Logs de Execução
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS executionLogs (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -53,8 +83,7 @@ def init_db():
             createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
         )
         """)
-        
-        # Tabela de Configuração do Pipeline
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS pipelineConfig (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -66,8 +95,7 @@ def init_db():
             updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
         """)
-        
-        # Tabela de Cache de Itens
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS cacheItems (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -79,8 +107,7 @@ def init_db():
             publishedAt DATETIME DEFAULT CURRENT_TIMESTAMP
         )
         """)
-        
-        # Tabela de Status de Integração
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS integrationStatus (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -91,8 +118,7 @@ def init_db():
             lastCheckedAt DATETIME DEFAULT CURRENT_TIMESTAMP
         )
         """)
-        
-        # Tabela de Configurações de Integração
+
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS integrationSettings (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -109,18 +135,17 @@ def init_db():
             gtmId VARCHAR(255),
             isActive BOOLEAN DEFAULT true NOT NULL,
             createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
-            INDEX idx_integrationName (integrationName)
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL
         )
         """)
-        
+
         logger.info("✅ Todas as tabelas foram criadas ou já existem.")
-        
         cursor.close()
         conn.close()
-        
+
     except Exception as e:
         logger.error(f"❌ Erro ao inicializar banco de dados: {e}")
+
 
 if __name__ == "__main__":
     init_db()
