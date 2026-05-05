@@ -6,18 +6,33 @@ import { generateImage } from "./_core/imageGeneration";
  */
 export async function extractProductDataFromUrl(url: string) {
   try {
+    // Usar User-Agent mais realista para evitar bloqueios
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos de timeout
+
     const response = await fetch(url, {
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8",
+        "Referer": "https://www.google.com/",
       },
+      signal: controller.signal,
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      throw new Error(`Failed to fetch URL: ${response.statusText}`);
+      throw new Error(
+        `Não consegui acessar a URL (${response.status}). O site pode estar bloqueando requisições. Tente outro link.`
+      );
     }
 
     const html = await response.text();
+    if (!html || html.length < 100) {
+      throw new Error("A página retornou conteúdo vazio. Verifique se a URL é válida.");
+    }
 
     // Usar Gemini para extrair dados do HTML
     const extraction = await invokeLLM({
@@ -55,12 +70,22 @@ Be precise and extract only the main product information.`,
     });
 
     const content = extraction.choices[0]?.message?.content;
-    if (!content) throw new Error("No response from LLM");
+    if (!content) throw new Error("Não consegui extrair dados do produto. Tente outra URL.");
 
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    if (!parsed.name) {
+      throw new Error("Não consegui identificar o nome do produto. Tente outra URL.");
+    }
+
+    return parsed;
   } catch (error) {
-    console.error("Error extracting product data:", error);
-    throw error;
+    if (error instanceof Error) {
+      if (error.name === "AbortError") {
+        throw new Error("A requisição demorou muito. O site pode estar lento ou bloqueando. Tente novamente.");
+      }
+      throw error;
+    }
+    throw new Error("Erro ao buscar dados do produto");
   }
 }
 

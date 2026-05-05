@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Loader2, Search, Trash2, Edit2, Send } from "lucide-react";
+import { Loader2, Search, Trash2, Edit2, Send, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export default function PublishManual() {
@@ -35,6 +35,7 @@ export default function PublishManual() {
         new URL(productUrl);
       } catch {
         toast.error("URL inválida");
+        setIsSearching(false);
         return;
       }
 
@@ -63,10 +64,17 @@ export default function PublishManual() {
         await getMyPostsQuery.refetch();
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao buscar produto");
+      const errorMsg = error instanceof Error ? error.message : "Erro ao buscar produto";
+      toast.error(errorMsg);
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const handleCancelSearch = () => {
+    setIsSearching(false);
+    processUrlMutation.reset();
+    toast.info("Busca cancelada");
   };
 
   const handleDeletePost = async (id: number) => {
@@ -165,24 +173,32 @@ export default function PublishManual() {
                       className="flex-1"
                       disabled={isSearching}
                     />
-                    <Button
-                      onClick={handleSearchProduct}
-                      disabled={isSearching || !productUrl.trim()}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      {isSearching ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Buscando...
-                        </>
-                      ) : (
-                        <>
-                          <Search className="w-4 h-4 mr-2" />
-                          Buscar
-                        </>
-                      )}
-                    </Button>
+                    {isSearching ? (
+                      <Button
+                        onClick={handleCancelSearch}
+                        variant="destructive"
+                        className="gap-2"
+                      >
+                        <X className="w-4 h-4" />
+                        Cancelar
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={handleSearchProduct}
+                        disabled={!productUrl.trim()}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        <Search className="w-4 h-4 mr-2" />
+                        Buscar
+                      </Button>
+                    )}
                   </div>
+                  {isSearching && (
+                    <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Processando... Isso pode levar alguns minutos.
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
