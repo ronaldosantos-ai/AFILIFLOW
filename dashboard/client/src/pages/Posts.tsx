@@ -1,194 +1,241 @@
-import DashboardLayout from "@/components/DashboardLayout";
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, CheckCircle, AlertCircle, Clock } from "lucide-react";
-
-const mockPosts = [
-  {
-    id: 1,
-    productName: "Fone de Ouvido Bluetooth Premium",
-    price: 189.90,
-    category: "Eletrônicos",
-    imageUrl: "https://via.placeholder.com/300x300?text=Fone+Bluetooth",
-    affiliateUrl: "https://shopee.com.br/product/123456",
-    status: "published",
-    publishedChannels: ["telegram", "instagram"],
-    publishedAt: "2026-04-21T10:30:00Z",
-  },
-  {
-    id: 2,
-    productName: "Luminária LED Inteligente",
-    price: 79.50,
-    category: "Casa e Cozinha",
-    imageUrl: "https://via.placeholder.com/300x300?text=Luminaria+LED",
-    affiliateUrl: "https://shopee.com.br/product/234567",
-    status: "published",
-    publishedChannels: ["telegram", "instagram", "facebook"],
-    publishedAt: "2026-04-21T09:15:00Z",
-  },
-  {
-    id: 3,
-    productName: "Tapete de Yoga Antiderrapante",
-    price: 59.90,
-    category: "Esportes",
-    imageUrl: "https://via.placeholder.com/300x300?text=Tapete+Yoga",
-    affiliateUrl: "https://shopee.com.br/product/345678",
-    status: "published",
-    publishedChannels: ["telegram"],
-    publishedAt: "2026-04-21T08:00:00Z",
-  },
-  {
-    id: 4,
-    productName: "Sérum Facial Vitamina C",
-    price: 45.00,
-    category: "Beleza",
-    imageUrl: "https://via.placeholder.com/300x300?text=Serum+Vitamina+C",
-    affiliateUrl: "https://shopee.com.br/product/456789",
-    status: "failed",
-    publishedChannels: [],
-    publishedAt: "2026-04-21T07:30:00Z",
-    errorMessage: "Falha ao conectar com Instagram",
-  },
-  {
-    id: 5,
-    productName: "Carregador Rápido USB-C 65W",
-    price: 129.90,
-    category: "Eletrônicos",
-    imageUrl: "https://via.placeholder.com/300x300?text=Carregador+USB-C",
-    affiliateUrl: "https://shopee.com.br/product/567890",
-    status: "pending",
-    publishedChannels: [],
-    publishedAt: "2026-04-21T06:45:00Z",
-  },
-];
-
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "published":
-      return (
-        <Badge className="bg-accent text-accent-foreground flex items-center gap-1">
-          <CheckCircle className="w-3 h-3" />
-          Publicado
-        </Badge>
-      );
-    case "failed":
-      return (
-        <Badge className="bg-destructive text-destructive-foreground flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" />
-          Falha
-        </Badge>
-      );
-    case "pending":
-      return (
-        <Badge className="bg-muted text-muted-foreground flex items-center gap-1">
-          <Clock className="w-3 h-3" />
-          Pendente
-        </Badge>
-      );
-    default:
-      return null;
-  }
-};
-
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  return date.toLocaleString("pt-BR");
-};
+import { Loader2, ExternalLink, Trash2, Eye } from "lucide-react";
+import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import DashboardLayout from "@/components/DashboardLayout";
 
 export default function Posts() {
+  const [selectedPost, setSelectedPost] = useState<any | null>(null);
+
+  const postsQuery = trpc.dashboard.getPosts.useQuery({ limit: 50 });
+  const deletePostMutation = trpc.dashboard.deletePost.useMutation();
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("Tem certeza que deseja deletar este post?")) return;
+
+    try {
+      await deletePostMutation.mutateAsync({ id });
+      toast.success("Post deletado!");
+      await postsQuery.refetch();
+      setSelectedPost(null);
+    } catch (error) {
+      toast.error("Erro ao deletar post");
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "published":
+        return (
+          <Badge className="bg-green-600 hover:bg-green-700">
+            ✓ Publicado
+          </Badge>
+        );
+      case "failed":
+        return (
+          <Badge variant="destructive">
+            ✗ Falha
+          </Badge>
+        );
+      case "pending":
+        return (
+          <Badge variant="secondary">
+            ⏳ Pendente
+          </Badge>
+        );
+      default:
+        return <Badge>{status}</Badge>;
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Postagens Recentes</h1>
-            <p className="text-muted-foreground mt-1">Feed visual das últimas publicações</p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Postagens</h1>
+          <p className="text-muted-foreground mt-1">
+            Histórico de todas as postagens publicadas
+          </p>
         </div>
 
-        {/* Posts Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mockPosts.map((post) => (
-            <Card key={post.id} className="bg-card border-border overflow-hidden hover:shadow-lg transition-shadow">
-              {/* Image */}
-              <div className="relative w-full h-48 bg-muted overflow-hidden">
-                <img
-                  src={post.imageUrl}
-                  alt={post.productName}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute top-2 right-2">
-                  {getStatusBadge(post.status)}
-                </div>
-              </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle>Histórico de Postagens</CardTitle>
+                <CardDescription>
+                  {postsQuery.data?.length || 0} postagens no total
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {postsQuery.isLoading ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                  </div>
+                ) : postsQuery.data && postsQuery.data.length > 0 ? (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {postsQuery.data.map((post: any) => (
+                      <button
+                        key={post.id}
+                        onClick={() => setSelectedPost(post)}
+                        className={`w-full text-left p-4 rounded-lg border transition ${
+                          selectedPost?.id === post.id
+                            ? "bg-blue-50 dark:bg-blue-900/20 border-blue-500 shadow-md"
+                            : "bg-card border-border hover:border-blue-400"
+                        }`}
+                      >
+                        {post.imageUrl && (
+                          <img
+                            src={post.imageUrl}
+                            alt={post.productName}
+                            className="w-full h-24 object-cover rounded mb-2"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src =
+                                "https://via.placeholder.com/300x300?text=Sem+Imagem";
+                            }}
+                          />
+                        )}
 
-              {/* Content */}
-              <CardContent className="pt-4">
-                {/* Category Badge */}
-                <Badge variant="outline" className="mb-2">
-                  {post.category}
-                </Badge>
-
-                {/* Product Name */}
-                <h3 className="font-semibold text-foreground mb-2 line-clamp-2">
-                  {post.productName}
-                </h3>
-
-                {/* Price */}
-                <div className="text-2xl font-bold text-accent mb-3">
-                  R$ {post.price.toFixed(2)}
-                </div>
-
-                {/* Channels Published */}
-                {post.publishedChannels.length > 0 && (
-                  <div className="mb-3">
-                    <p className="text-xs text-muted-foreground mb-1">Publicado em:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {post.publishedChannels.map((channel) => (
-                        <Badge key={channel} variant="secondary" className="text-xs">
-                          {channel === "telegram" && "📱 Telegram"}
-                          {channel === "instagram" && "📷 Instagram"}
-                          {channel === "facebook" && "👍 Facebook"}
-                        </Badge>
-                      ))}
-                    </div>
+                        <div className="space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="font-semibold text-sm text-foreground line-clamp-1 flex-1">
+                              {post.productName}
+                            </h3>
+                            {getStatusBadge(post.status)}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {post.category && `📁 ${post.category}`}
+                          </p>
+                          {post.price && (
+                            <p className="text-xs font-semibold text-foreground">
+                              R$ {parseFloat(post.price).toFixed(2)}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between pt-2">
+                            <div className="flex gap-1">
+                              {post.publishedChannels?.map((channel: string) => (
+                                <span
+                                  key={channel}
+                                  className="text-xs px-2 py-0.5 bg-muted rounded"
+                                >
+                                  {channel === "telegram" && "📱"}
+                                  {channel === "instagram" && "📷"}
+                                  {channel === "facebook" && "👍"}
+                                </span>
+                              ))}
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {post.createdAt &&
+                                new Date(post.createdAt).toLocaleDateString("pt-BR")}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    📭 Nenhuma postagem ainda
                   </div>
                 )}
-
-                {/* Error Message */}
-                {post.errorMessage && (
-                  <div className="mb-3 p-2 bg-destructive/10 rounded text-xs text-destructive">
-                    {post.errorMessage}
-                  </div>
-                )}
-
-                {/* Timestamp */}
-                <p className="text-xs text-muted-foreground mb-4">
-                  {formatDate(post.publishedAt)}
-                </p>
-
-                {/* Affiliate Link Button */}
-                <Button
-                  asChild
-                  className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
-                >
-                  <a href={post.affiliateUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Ver Produto
-                  </a>
-                </Button>
               </CardContent>
             </Card>
-          ))}
-        </div>
+          </div>
 
-        {/* Load More */}
-        <div className="flex justify-center">
-          <Button variant="outline" className="border-border">
-            Carregar Mais
-          </Button>
+          {selectedPost && (
+            <div className="space-y-4">
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg">Detalhes</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  {selectedPost.imageUrl && (
+                    <div>
+                      <img
+                        src={selectedPost.imageUrl}
+                        alt={selectedPost.productName}
+                        className="w-full h-32 object-cover rounded"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src =
+                            "https://via.placeholder.com/300x300?text=Sem+Imagem";
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground">Produto</p>
+                    <p className="text-foreground mt-1">{selectedPost.productName}</p>
+                  </div>
+
+                  {selectedPost.category && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground">Categoria</p>
+                      <p className="text-foreground mt-1">{selectedPost.category}</p>
+                    </div>
+                  )}
+
+                  {selectedPost.price && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground">Preço</p>
+                      <p className="text-foreground mt-1 font-bold">
+                        R$ {parseFloat(selectedPost.price).toFixed(2)}
+                      </p>
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground">Status</p>
+                    <div className="mt-1">{getStatusBadge(selectedPost.status)}</div>
+                  </div>
+
+                  {selectedPost.publishedChannels?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground">
+                        Canais Publicados
+                      </p>
+                      <div className="flex gap-2 mt-1">
+                        {selectedPost.publishedChannels.map((channel: string) => (
+                          <Badge key={channel} variant="outline">
+                            {channel === "telegram" && "📱 Telegram"}
+                            {channel === "instagram" && "📷 Instagram"}
+                            {channel === "facebook" && "👍 Facebook"}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedPost.affiliateUrl && (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground">Link</p>
+                      <a
+                        href={selectedPost.affiliateUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline text-xs mt-1 flex items-center gap-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Abrir Link
+                      </a>
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={() => handleDelete(selectedPost.id)}
+                    variant="destructive"
+                    className="w-full gap-2 mt-4"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Deletar Post
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       </div>
     </DashboardLayout>
