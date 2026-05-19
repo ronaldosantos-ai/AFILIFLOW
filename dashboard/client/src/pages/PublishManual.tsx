@@ -15,7 +15,7 @@ export default function PublishManual() {
   const [isSearching, setIsSearching] = useState(false);
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [editMode, setEditMode] = useState(false);
-  const [isPublishing, setIsPublishing] = useState(false);
+
 
   const createPostMutation = trpc.dashboard.createManualPost.useMutation();
   const getMyPostsQuery = trpc.dashboard.getMyManualPosts.useQuery();
@@ -111,28 +111,7 @@ export default function PublishManual() {
     }
   };
 
-  const handlePublish = async () => {
-    if (!selectedPost || !selectedPost.publishChannels?.length) {
-      toast.error("Selecione pelo menos um canal de publicação");
-      return;
-    }
 
-    setIsPublishing(true);
-    try {
-      await updatePostMutation.mutateAsync({
-        id: selectedPost.id,
-        status: "pending",
-        publishChannels: selectedPost.publishChannels,
-      });
-      toast.success("Post enviado para aprovação!");
-      setSelectedPost(null);
-      await getMyPostsQuery.refetch();
-    } catch (error) {
-      toast.error("Erro ao publicar post");
-    } finally {
-      setIsPublishing(false);
-    }
-  };
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -344,37 +323,10 @@ export default function PublishManual() {
                 )}
               </div>
 
-              {/* Publish Channels */}
-              <div className="border-t pt-4">
-                <Label className="text-xs font-semibold text-muted-foreground mb-3 block">Canais de Publicação</Label>
-                <div className="flex gap-2 flex-wrap">
-                  {["telegram", "instagram"].map((channel) => (
-                    <button
-                      key={channel}
-                      onClick={() => {
-                        const channels = selectedPost.publishChannels || [];
-                        if (channels.includes(channel)) {
-                          setSelectedPost({
-                            ...selectedPost,
-                            publishChannels: channels.filter((c: string) => c !== channel),
-                          });
-                        } else {
-                          setSelectedPost({
-                            ...selectedPost,
-                            publishChannels: [...channels, channel],
-                          });
-                        }
-                      }}
-                      className={`px-4 py-2 rounded-lg border transition ${
-                        selectedPost.publishChannels?.includes(channel)
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-card border-border hover:border-blue-400"
-                      }`}
-                    >
-                      {channel === "telegram" ? "📱 Telegram" : "📷 Instagram"}
-                    </button>
-                  ))}
-                </div>
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded border border-blue-200 dark:border-blue-800 mt-4">
+                <p className="text-sm text-blue-900 dark:text-blue-100">
+                  💡 <strong>Como usar:</strong> Copie o conteúdo acima e cole manualmente no Telegram, Instagram ou Facebook.
+                </p>
               </div>
 
               {/* Action Buttons */}
@@ -396,23 +348,23 @@ export default function PublishManual() {
                     </Button>
                   </>
                 ) : (
-                  <Button
-                    onClick={handlePublish}
-                    disabled={isPublishing || !selectedPost.publishChannels?.length}
-                    className="w-full bg-green-600 hover:bg-green-700"
-                  >
-                    {isPublishing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Publicando...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-4 h-4 mr-2" />
-                        Enviar para Aprovação
-                      </>
-                    )}
-                  </Button>
+                  <>
+                    <Button
+                      onClick={() => setEditMode(true)}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    >
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Editar
+                    </Button>
+                    <Button
+                      onClick={() => handleDeletePost(selectedPost.id)}
+                      variant="destructive"
+                      className="flex-1"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Deletar
+                    </Button>
+                  </>
                 )}
               </div>
             </CardContent>
