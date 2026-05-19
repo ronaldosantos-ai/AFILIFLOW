@@ -16,6 +16,9 @@ import {
   getManualPostsByUser,
   updateManualPost,
   deleteManualPost,
+  trackCopy,
+  getCopyHistory,
+  getCopyStats,
 } from "./db";
 import { registerUser, loginUser, getPendingUsers, authorizeUser, rejectUser } from "./auth";
 import type { User } from "../drizzle/schema";
@@ -464,6 +467,39 @@ export const appRouter = router({
         }
         
         return { success: true };
+      }),
+  }),
+  
+  tracking: router({
+    trackCopy: protectedProcedure
+      .input(z.object({
+        contentApprovalId: z.number(),
+        fieldName: z.string(),
+        copiedText: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        return await trackCopy({
+          contentApprovalId: input.contentApprovalId,
+          fieldName: input.fieldName,
+          copiedText: input.copiedText,
+          userId: ctx.user?.id,
+        });
+      }),
+    
+    getCopyHistory: protectedProcedure
+      .input(z.object({
+        contentApprovalId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        return await getCopyHistory(input.contentApprovalId);
+      }),
+    
+    getCopyStats: protectedProcedure
+      .input(z.object({
+        contentApprovalId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        return await getCopyStats(input.contentApprovalId);
       }),
   }),
 });

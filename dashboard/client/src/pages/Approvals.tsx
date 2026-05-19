@@ -22,10 +22,25 @@ export default function Approvals() {
   const rejectContentMutation = trpc.dashboard.rejectContent.useMutation();
   const updateDescriptionMutation = trpc.dashboard.updateContentDescription.useMutation();
 
-  const handleCopy = (text: string, field: string) => {
+  const trackCopyMutation = trpc.tracking.trackCopy.useMutation();
+
+  const handleCopy = async (text: string, field: string) => {
     navigator.clipboard.writeText(text);
     setCopiedField(field);
     toast.success("Copiado!");
+    
+    if (selectedApproval?.id) {
+      try {
+        await trackCopyMutation.mutateAsync({
+          contentApprovalId: selectedApproval.id,
+          fieldName: field,
+          copiedText: text.substring(0, 100),
+        });
+      } catch (error) {
+        console.error("Error tracking copy:", error);
+      }
+    }
+    
     setTimeout(() => setCopiedField(null), 2000);
   };
 

@@ -240,3 +240,18 @@ export const manualPosts = mysqlTable("manualPosts", {
 
 export type ManualPost = typeof manualPosts.$inferSelect;
 export type InsertManualPost = typeof manualPosts.$inferInsert;
+
+/**
+ * Copy Tracking table: tracks when users copy content fields
+ */
+export const copyTracking = mysqlTable("copyTracking", {
+  id: int("id").autoincrement().primaryKey(),
+  contentApprovalId: int("contentApprovalId").notNull(),
+  fieldName: varchar("fieldName", { length: 64 }).notNull(), // 'title', 'description', 'hashtags', 'url'
+  copiedText: text("copiedText"),
+  userId: int("userId"),
+  copiedAt: timestamp("copiedAt").defaultNow().notNull(),
+});
+
+export type CopyTracking = typeof copyTracking.$inferSelect;
+export type InsertCopyTracking = typeof copyTracking.$inferInsert;
