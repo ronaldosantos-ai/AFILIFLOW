@@ -177,7 +177,7 @@ export default function Approvals() {
                   {selectedApproval.affiliateUrl && (
                     <div>
                       <Label className="text-xs font-semibold text-muted-foreground">
-                        Link de Afiliado
+                        Link de Afiliado (Copiar e Colar)
                       </Label>
                       <div className="flex gap-1 mt-1">
                         <input
@@ -191,9 +191,10 @@ export default function Approvals() {
                           size="sm"
                           variant="outline"
                           className="h-auto p-1"
+                          title="Copiar link"
                         >
                           {copiedField === "url" ? (
-                            <Check className="w-3 h-3" />
+                            <Check className="w-3 h-3 text-green-600" />
                           ) : (
                             <Copy className="w-3 h-3" />
                           )}
@@ -216,17 +217,24 @@ export default function Approvals() {
             <CardContent className="space-y-4">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <Label className="text-sm font-semibold">Descrição</Label>
+                  <Label className="text-sm font-semibold">Descrição (Copiar e Colar)</Label>
                   <Button
                     onClick={() => handleCopy(editDescription, "description")}
                     size="sm"
-                    variant="ghost"
-                    className="h-auto p-1"
+                    variant="outline"
+                    className="h-auto p-2 gap-1"
+                    title="Copiar descrição"
                   >
                     {copiedField === "description" ? (
-                      <Check className="w-3 h-3" />
+                      <>
+                        <Check className="w-4 h-4 text-green-600" />
+                        Copiado!
+                      </>
                     ) : (
-                      <Copy className="w-3 h-3" />
+                      <>
+                        <Copy className="w-4 h-4" />
+                        Copiar
+                      </>
                     )}
                   </Button>
                 </div>
@@ -237,6 +245,56 @@ export default function Approvals() {
                 />
               </div>
 
+              {selectedApproval.hashtags && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-sm font-semibold">Hashtags (Copiar e Colar)</Label>
+                    <Button
+                      onClick={() => handleCopy(selectedApproval.hashtags, "hashtags")}
+                      size="sm"
+                      variant="outline"
+                      className="h-auto p-2 gap-1"
+                      title="Copiar hashtags"
+                    >
+                      {copiedField === "hashtags" ? (
+                        <>
+                          <Check className="w-4 h-4 text-green-600" />
+                          Copiado!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          Copiar
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <input
+                    type="text"
+                    value={selectedApproval.hashtags}
+                    readOnly
+                    className="w-full px-3 py-2 text-sm bg-muted rounded border border-border"
+                  />
+                </div>
+              )}
+
+              {selectedApproval.imageUrl && (
+                <div>
+                  <Label className="text-sm font-semibold mb-2 block">Imagem Gerada</Label>
+                  <img
+                    src={selectedApproval.imageUrl}
+                    alt="Generated"
+                    className="w-full h-32 object-cover rounded border border-border"
+                  />
+                </div>
+              )}
+
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded border border-blue-200 dark:border-blue-800">
+                <p className="text-sm text-blue-900 dark:text-blue-100">
+                  💡 <strong>Como usar:</strong> Copie cada campo acima e cole manualmente no Facebook, Instagram ou Telegram.
+                </p>
+              </div>
+
               <div className="flex gap-2 pt-4 border-t">
                 <Button
                   onClick={() => handleUpdateDescription(selectedApproval.id)}
@@ -244,14 +302,6 @@ export default function Approvals() {
                   className="flex-1 gap-2"
                 >
                   Salvar Edição
-                </Button>
-
-                <Button
-                  onClick={() => handleApprove(selectedApproval.id)}
-                  className="flex-1 bg-green-600 hover:bg-green-700 gap-2"
-                >
-                  <ThumbsUp className="w-4 h-4" />
-                  Aprovar
                 </Button>
 
                 <Button
