@@ -7,39 +7,31 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Loader2, Search, Trash2, Edit2, Send, X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Loader2, Search, Trash2, Copy, Check, Image, ExternalLink, ThumbsUp, X } from "lucide-react";
 
 export default function PublishManual() {
   const [productUrl, setProductUrl] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [selectedPost, setSelectedPost] = useState<any>(null);
-  const [editMode, setEditMode] = useState(false);
-
+  const [selected, setSelected] = useState<any>(null);
+  const [copied, setCopied] = useState<Record<string, boolean>>({});
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editHashtags, setEditHashtags] = useState("");
 
   const createPostMutation = trpc.dashboard.createManualPost.useMutation();
   const getMyPostsQuery = trpc.dashboard.getMyManualPosts.useQuery();
   const updatePostMutation = trpc.dashboard.updateManualPost.useMutation();
   const deletePostMutation = trpc.dashboard.deleteManualPost.useMutation();
   const processUrlMutation = trpc.dashboard.processProductUrl.useMutation();
+  const approveContentMutation = trpc.dashboard.approveContent.useMutation();
 
-  const handleSearchProduct = async () => {
-    if (!productUrl.trim()) {
-      toast.error("Cole uma URL válida");
-      return;
-    }
+  const handleSearch = async () => {
+    if (!productUrl.trim()) { toast.error("Cole uma URL válida"); return; }
+    try { new URL(productUrl); } catch { toast.error("URL inválida"); return; }
 
     setIsSearching(true);
     try {
-      try {
-        new URL(productUrl);
-      } catch {
-        toast.error("URL inválida");
-        setIsSearching(false);
-        return;
-      }
-
-      toast.loading("Buscando dados do produto...");
+      toast.loading("Buscando produto e gerando conteúdo...");
       const contentData = await processUrlMutation.mutateAsync({ url: productUrl });
 
       const result = await createPostMutation.mutateAsync({
@@ -58,318 +50,332 @@ export default function PublishManual() {
           generatedImage: contentData.generatedImage,
           status: "draft",
         });
-
-        toast.success("Produto processado! Conteúdo gerado com sucesso!");
+        toast.success("Produto processado! Conteúdo gerado com sucesso.");
         setProductUrl("");
         await getMyPostsQuery.refetch();
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : "Erro ao buscar produto";
-      toast.error(errorMsg);
+      toast.error(error instanceof Error ? error.message : "Erro ao processar URL");
+    } finally {
       setIsSearching(false);
-      processUrlMutation.reset();
-      createPostMutation.reset();
-      updatePostMutation.reset();
     }
   };
 
-  const handleCancelSearch = () => {
-    setIsSearching(false);
-    processUrlMutation.reset();
-    createPostMutation.reset();
-    updatePostMutation.reset();
-    toast.info("Busca cancelada");
+  const handleSelect = (post: any) => {
+    setSelected(post);
+    setEditTitle(post.generatedTitle || post.title || post.productName || "");
+    setEditDescription(post.editedDescription || post.aidaDescription || post.description || "");
+    setEditHashtags(post.generatedHashtags || post.hashtags || "");
+    setCopied({});
   };
 
-  const handleDeletePost = async (id: number) => {
-    if (!confirm("Tem certeza que deseja deletar este post?")) return;
+  const handleCopy = (text: string, field: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopied((prev) => ({ ...prev, [field]: true }));
+    toast.success("Copiado!");
+    setTimeout(() => setCopied((prev) => ({ ...prev, [field]: false })), 3000);
+  };
 
+  const handleCopyImage = async (imageUrl: string) => {
     try {
-      await deletePostMutation.mutateAsync({ id });
-      toast.success("Post deletado");
-      setSelectedPost(null);
-      await getMyPostsQuery.refetch();
-    } catch (error) {
-      toast.error("Erro ao deletar post");
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      setCopied((prev) => ({ ...prev, image: true }));
+      toast.success("Imagem copiada!");
+      setTimeout(() => setCopied((prev) => ({ ...prev, image: false })), 3000);
+    } catch {
+      handleCopy(imageUrl, "image");
+      toast.info("URL da imagem copiada");
     }
   };
 
-  const handleSavePost = async () => {
-    if (!selectedPost) return;
-
+  const handleSave = async () => {
+    if (!selected) return;
     try {
       await updatePostMutation.mutateAsync({
-        id: selectedPost.id,
-        editedDescription: selectedPost.editedDescription || selectedPost.aidaDescription,
+        id: selected.id,
+        aidaDescription: editDescription,
         status: "draft",
       });
-      toast.success("Post salvo!");
-      setEditMode(false);
+      toast.success("Salvo!");
+    } catch { toast.error("Erro ao salvar"); }
+  };
+
+  const handleSaveAsApproved = async () => {
+    if (!selected) return;
+    try {
+      await updatePostMutation.mutateAsync({
+        id: selected.id,
+        aidaDescription: editDescription,
+        status: "published",
+      });
+      toast.success("✅ Salvo como aprovado — aparece em Postagens!");
+      setSelected(null);
       await getMyPostsQuery.refetch();
-    } catch (error) {
-      toast.error("Erro ao salvar post");
-    }
+    } catch { toast.error("Erro ao aprovar"); }
   };
 
-
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      draft: "bg-gray-100 text-gray-800",
-      pending: "bg-yellow-100 text-yellow-800",
-      approved: "bg-green-100 text-green-800",
-      rejected: "bg-red-100 text-red-800",
-      published: "bg-blue-100 text-blue-800",
-    };
-    return colors[status] || "bg-gray-100 text-gray-800";
+  const handleDelete = async (id: number) => {
+    if (!confirm("Deletar este post?")) return;
+    try {
+      await deletePostMutation.mutateAsync({ id });
+      toast.success("Deletado!");
+      setSelected(null);
+      await getMyPostsQuery.refetch();
+    } catch { toast.error("Erro ao deletar"); }
   };
+
+  const CopyButton = ({ field, value, label }: { field: string; value: string; label: string }) => (
+    <Button
+      onClick={() => handleCopy(value, field)}
+      size="sm"
+      variant={copied[field] ? "default" : "outline"}
+      className={`gap-1 transition-all ${copied[field] ? "bg-green-600 text-white border-green-600" : ""}`}
+    >
+      {copied[field]
+        ? <><Check className="w-3 h-3" /> Copiado!</>
+        : <><Copy className="w-3 h-3" /> {label}</>}
+    </Button>
+  );
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Publicar Manualmente</h1>
-          <p className="text-muted-foreground mt-1">Cole a URL do produto e gere conteúdo para publicar</p>
+          <h1 className="text-3xl font-bold text-foreground">Publicar Manual</h1>
+          <p className="text-muted-foreground mt-1">
+            Cole o link do produto — o sistema gera o link de afiliado e todo o conteúdo
+          </p>
         </div>
 
+        {/* Campo de URL */}
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle>Link do Produto</CardTitle>
+            <CardDescription>Cole a URL da página do produto na Shopee</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Input
+                type="url"
+                value={productUrl}
+                onChange={(e) => setProductUrl(e.target.value)}
+                placeholder="https://shopee.com.br/product/..."
+                className="flex-1"
+                disabled={isSearching}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              />
+              {isSearching ? (
+                <Button
+                  onClick={() => { setIsSearching(false); processUrlMutation.reset(); }}
+                  variant="destructive"
+                  className="gap-2"
+                >
+                  <X className="w-4 h-4" /> Cancelar
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSearch}
+                  disabled={!productUrl.trim()}
+                  className="gap-2"
+                >
+                  {isSearching
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Search className="w-4 h-4" />}
+                  Gerar Conteúdo
+                </Button>
+              )}
+            </div>
+            {isSearching && (
+              <p className="text-sm text-muted-foreground mt-2 flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Processando produto e gerando imagem + texto... pode levar alguns instantes.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Input Section */}
-          <div className="lg:col-span-2">
+
+          {/* Lista de posts manuais */}
+          <div className="lg:col-span-1">
             <Card className="bg-card border-border">
               <CardHeader>
-                <CardTitle>Buscar Produto</CardTitle>
-                <CardDescription>Cole a URL de qualquer marketplace ou site de marca</CardDescription>
+                <CardTitle>Posts Gerados</CardTitle>
+                <CardDescription>{getMyPostsQuery.data?.length || 0} posts</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="productUrl" className="text-sm font-medium">
-                    URL do Produto
-                  </Label>
-                  <div className="flex gap-2 mt-2">
-                    <Input
-                      id="productUrl"
-                      type="url"
-                      value={productUrl}
-                      onChange={(e) => setProductUrl(e.target.value)}
-                      placeholder="https://www.shopee.com.br/product/..."
-                      className="flex-1"
-                      disabled={isSearching}
-                    />
-                    {isSearching ? (
-                      <Button
-                        onClick={handleCancelSearch}
-                        variant="destructive"
-                        className="gap-2"
-                      >
-                        <X className="w-4 h-4" />
-                        Cancelar
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={handleSearchProduct}
-                        disabled={!productUrl.trim()}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        <Search className="w-4 h-4 mr-2" />
-                        Buscar
-                      </Button>
-                    )}
+              <CardContent>
+                {getMyPostsQuery.isLoading ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                   </div>
-                  {isSearching && (
-                    <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Processando... Isso pode levar alguns minutos.
-                    </div>
-                  )}
-                </div>
+                ) : getMyPostsQuery.data && getMyPostsQuery.data.length > 0 ? (
+                  <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+                    {getMyPostsQuery.data.map((post: any) => (
+                      <button
+                        key={post.id}
+                        onClick={() => handleSelect(post)}
+                        className={`w-full text-left p-3 rounded-lg border transition-all ${
+                          selected?.id === post.id
+                            ? "bg-primary/10 border-primary shadow-md"
+                            : "bg-card border-border hover:border-primary/50"
+                        }`}
+                      >
+                        {(post.generatedImage || post.productImage) && (
+                          <img
+                            src={post.generatedImage || post.productImage}
+                            alt={post.productName}
+                            className="w-full h-24 object-cover rounded mb-2"
+                          />
+                        )}
+                        <h3 className="font-medium text-sm text-foreground line-clamp-2">
+                          {post.productName}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {post.status === "published" ? "✅ Aprovado" : "📝 Rascunho"}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    Nenhum post gerado ainda
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Posts List */}
-          <div className="space-y-2">
-            <h2 className="font-semibold text-foreground mb-3">Meus Posts</h2>
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {getMyPostsQuery.isLoading ? (
-                <div className="text-center py-4">
-                  <Loader2 className="w-4 h-4 animate-spin mx-auto" />
-                </div>
-              ) : getMyPostsQuery.data && getMyPostsQuery.data.length > 0 ? (
-                getMyPostsQuery.data.map((post: any) => (
-                  <button
-                    key={post.id}
-                    onClick={() => {
-                      setSelectedPost(post);
-                      setEditMode(false);
-                    }}
-                    className={`w-full text-left p-3 rounded-lg border transition ${
-                      selectedPost?.id === post.id
-                        ? "bg-blue-50 dark:bg-blue-900/20 border-blue-500 shadow-md"
-                        : "bg-card border-border hover:border-blue-400"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-sm text-foreground truncate">{post.productName}</h3>
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{post.productUrl}</p>
-                      </div>
-                      <Badge className={getStatusColor(post.status)}>{post.status}</Badge>
+          {/* Painel de conteúdo */}
+          {selected ? (
+            <div className="lg:col-span-2 space-y-4">
+
+              {/* Imagem gerada */}
+              {(selected.generatedImage || selected.productImage) && (
+                <Card className="bg-card border-border">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">Imagem</CardTitle>
+                      <Button
+                        onClick={() => handleCopyImage(selected.generatedImage || selected.productImage)}
+                        size="sm"
+                        variant={copied["image"] ? "default" : "outline"}
+                        className={`gap-2 ${copied["image"] ? "bg-green-600 text-white border-green-600" : ""}`}
+                      >
+                        {copied["image"]
+                          ? <><Check className="w-4 h-4" /> Copiada!</>
+                          : <><Image className="w-4 h-4" /> Copiar Imagem</>}
+                      </Button>
                     </div>
-                  </button>
-                ))
-              ) : (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  Nenhum post ainda
-                </div>
+                  </CardHeader>
+                  <CardContent>
+                    <img
+                      src={selected.generatedImage || selected.productImage}
+                      alt="Produto"
+                      className="w-full max-h-64 object-cover rounded border border-border"
+                    />
+                  </CardContent>
+                </Card>
               )}
-            </div>
-          </div>
-        </div>
 
-        {/* Post Details */}
-        {selectedPost && (
-          <Card className="bg-card border-border">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>{selectedPost.productName}</CardTitle>
-                <CardDescription>ID: {selectedPost.id}</CardDescription>
-              </div>
-              <Button
-                onClick={() => handleDeletePost(selectedPost.id)}
-                variant="outline"
-                size="sm"
-                className="gap-2 text-red-600 hover:text-red-700"
-              >
-                <Trash2 className="w-4 h-4" />
-                Deletar
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Product Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Preço</Label>
-                  <p className="text-lg font-bold text-foreground mt-1">
-                    {selectedPost.productPrice ? `R$ ${selectedPost.productPrice}` : "N/A"}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Status</Label>
-                  <Badge className={`${getStatusColor(selectedPost.status)} mt-1`}>
-                    {selectedPost.status}
-                  </Badge>
-                </div>
-              </div>
-
-              {/* Product Image */}
-              {selectedPost.productImage && (
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Imagem do Produto</Label>
-                  <img
-                    src={selectedPost.productImage}
-                    alt={selectedPost.productName}
-                    className="mt-2 max-h-48 rounded-lg object-cover"
+              {/* Título */}
+              <Card className="bg-card border-border">
+                <CardContent className="pt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold">Título</Label>
+                    <CopyButton field="title" value={editTitle} label="Copiar" />
+                  </div>
+                  <Input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="text-sm"
                   />
-                </div>
-              )}
+                </CardContent>
+              </Card>
 
-              {/* Generated Image */}
-              {selectedPost.generatedImage && (
-                <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Imagem Gerada</Label>
-                  <img
-                    src={selectedPost.generatedImage}
-                    alt="Generated"
-                    className="mt-2 max-h-48 rounded-lg object-cover"
-                  />
-                </div>
-              )}
-
-              {/* Description */}
-              <div className="border-t pt-4">
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-xs font-semibold text-muted-foreground">
-                    Descrição {editMode ? "(Editável)" : ""}
-                  </Label>
-                  {!editMode && (
-                    <Button
-                      onClick={() => setEditMode(true)}
-                      variant="ghost"
-                      size="sm"
-                      className="gap-1 h-auto p-1"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                      Editar
-                    </Button>
-                  )}
-                </div>
-                {editMode ? (
+              {/* Descrição */}
+              <Card className="bg-card border-border">
+                <CardContent className="pt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold">Descrição</Label>
+                    <CopyButton field="description" value={editDescription} label="Copiar" />
+                  </div>
                   <Textarea
-                    value={selectedPost.editedDescription || selectedPost.aidaDescription || ""}
-                    onChange={(e) =>
-                      setSelectedPost({
-                        ...selectedPost,
-                        editedDescription: e.target.value,
-                      })
-                    }
-                    className="min-h-32"
-                    placeholder="Edite a descrição aqui..."
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className="min-h-32 text-sm"
                   />
-                ) : (
-                  <p className="text-sm text-foreground whitespace-pre-wrap bg-muted p-3 rounded-lg">
-                    {selectedPost.editedDescription || selectedPost.aidaDescription || "Aguardando geração..."}
-                  </p>
-                )}
-              </div>
+                </CardContent>
+              </Card>
 
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded border border-blue-200 dark:border-blue-800 mt-4">
-                <p className="text-sm text-blue-900 dark:text-blue-100">
-                  💡 <strong>Como usar:</strong> Copie o conteúdo acima e cole manualmente no Telegram, Instagram ou Facebook.
-                </p>
-              </div>
+              {/* Hashtags */}
+              <Card className="bg-card border-border">
+                <CardContent className="pt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold">Hashtags</Label>
+                    <CopyButton field="hashtags" value={editHashtags} label="Copiar" />
+                  </div>
+                  <Input
+                    value={editHashtags}
+                    onChange={(e) => setEditHashtags(e.target.value)}
+                    className="text-sm"
+                  />
+                </CardContent>
+              </Card>
 
-              {/* Action Buttons */}
-              <div className="flex gap-2 pt-4 border-t">
-                {editMode ? (
-                  <>
-                    <Button
-                      onClick={handleSavePost}
-                      className="flex-1 bg-green-600 hover:bg-green-700"
-                    >
-                      Salvar Alterações
-                    </Button>
-                    <Button
-                      onClick={() => setEditMode(false)}
-                      variant="outline"
-                      className="flex-1"
-                    >
-                      Cancelar
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      onClick={() => setEditMode(true)}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Edit2 className="w-4 h-4 mr-2" />
-                      Editar
-                    </Button>
-                    <Button
-                      onClick={() => handleDeletePost(selectedPost.id)}
-                      variant="destructive"
-                      className="flex-1"
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Deletar
-                    </Button>
-                  </>
-                )}
+              {/* Link de afiliado */}
+              {selected.affiliateUrl && (
+                <Card className="bg-card border-border">
+                  <CardContent className="pt-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-semibold">Link de Afiliado</Label>
+                      <div className="flex gap-2">
+                        <CopyButton field="link" value={selected.affiliateUrl} label="Copiar" />
+                        <a href={selected.affiliateUrl} target="_blank" rel="noopener noreferrer">
+                          <Button size="sm" variant="outline" className="gap-1">
+                            <ExternalLink className="w-3 h-3" /> Abrir
+                          </Button>
+                        </a>
+                      </div>
+                    </div>
+                    <Input value={selected.affiliateUrl} readOnly className="text-sm bg-muted" />
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Ações */}
+              <div className="flex gap-3">
+                <Button
+                  onClick={handleSave}
+                  variant="outline"
+                  className="flex-1"
+                  disabled={updatePostMutation.isPending}
+                >
+                  Salvar Edições
+                </Button>
+                <Button
+                  onClick={() => handleDelete(selected.id)}
+                  variant="destructive"
+                  className="flex-1 gap-2"
+                >
+                  <Trash2 className="w-4 h-4" /> Deletar
+                </Button>
+                <Button
+                  onClick={handleSaveAsApproved}
+                  className="flex-1 gap-2 bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <ThumbsUp className="w-4 h-4" /> Salvar como Aprovado
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          ) : (
+            <div className="lg:col-span-2 flex items-center justify-center text-muted-foreground">
+              <p>← Selecione um post ou gere um novo acima</p>
+            </div>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );
