@@ -1,6 +1,6 @@
 import { eq, desc, and, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, posts, pipelineConfig, executionLogs, integrationStatus, cacheItems, metricsSnapshots, contentApprovals, integrationSettings, manualPosts, InsertManualPost, ManualPost } from "../drizzle/schema";
+import { InsertUser, users, posts, pipelineConfig, executionLogs, integrationStatus, cacheItems, metricsSnapshots, contentApprovals, integrationSettings, manualPosts, InsertManualPost, ManualPost, copyTracking, InsertCopyTracking } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -304,4 +304,61 @@ export async function deleteManualPost(id: number) {
 
   await db.delete(manualPosts).where(eq(manualPosts.id, id));
   return true;
+}
+
+
+// ─────────────────────────────────────────────────────────
+// Copy Tracking Helpers
+// ─────────────────────────────────────────────────────────
+
+export async function trackCopy(data: InsertCopyTracking) {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const result = await db.insert(copyTracking).values(data);
+    return result;
+  } catch (error) {
+    console.error("Error tracking copy:", error);
+    return null;
+  }
+}
+
+export async function getCopyHistory(contentApprovalId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  try {
+    const history = await db
+      .select()
+      .from(copyTracking)
+      .where(eq(copyTracking.contentApprovalId, contentApprovalId))
+      .orderBy(desc(copyTracking.copiedAt));
+    return history;
+  } catch (error) {
+    console.error("Error getting copy history:", error);
+    return [];
+  }
+}
+
+export async function getCopyStats(contentApprovalId: number) {
+  const db = await getDb();
+  if (!db) return { totalCopies: 0, fields: {} };
+
+  try {
+    const history = await getCopyHistory(contentApprovalId);
+    const stats = {
+      totalCopies: history.length,
+      fields: {} as Record<string, number>,
+    };
+
+    history.forEach((item) => {
+      stats.fields[item.fieldName] = (stats.fields[item.fieldName] || 0) + 1;
+    });
+
+    return stats;
+  } catch (error) {
+    console.error("Error getting copy stats:", error);
+    return { totalCopies: 0, fields: {} };
+  }
 }

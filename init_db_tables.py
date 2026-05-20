@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """
 init_db_tables.py
 
@@ -5,14 +6,17 @@ Inicializa as tabelas do banco de dados MySQL.
 Usa variáveis de ambiente para conexão — nunca hardcode credenciais.
 """
 
+=======
+>>>>>>> 1eaa45aba26854401bbb8cba46f01a4b246e24c5
 import os
-import logging
-from urllib.parse import urlparse
 import mysql.connector
+from urllib.parse import urlparse
+import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+<<<<<<< HEAD
 
 def get_connection():
     """Obtém conexão com o banco usando variáveis de ambiente."""
@@ -20,6 +24,14 @@ def get_connection():
     if database_url:
         parsed = urlparse(database_url)
         return mysql.connector.connect(
+=======
+def init_db():
+    db_url = "mysql://root:iTaeDTgRLhlrDcsQtGmkIAbSoHqlaIai@monorail.proxy.rlwy.net:31361/railway"
+    parsed = urlparse(db_url)
+    
+    try:
+        conn = mysql.connector.connect(
+>>>>>>> 1eaa45aba26854401bbb8cba46f01a4b246e24c5
             host=parsed.hostname,
             port=parsed.port or 3306,
             user=parsed.username,
@@ -27,6 +39,7 @@ def get_connection():
             database=parsed.path.lstrip('/'),
             autocommit=True
         )
+<<<<<<< HEAD
 
     host = os.getenv("MYSQLHOST") or os.getenv("MYSQL_HOST")
     port = int(os.getenv("MYSQLPORT") or os.getenv("MYSQL_PORT") or 3306)
@@ -72,6 +85,29 @@ def init_db():
         """)
 
         # ── executionLogs ──────────────────────────────────────
+=======
+        cursor = conn.cursor()
+        
+        logger.info("🚀 Criando tabelas no banco de dados...")
+        
+        # Tabela de Posts
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS posts (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            productId VARCHAR(255) NOT NULL,
+            productName TEXT NOT NULL,
+            price DECIMAL(10, 2),
+            imageUrl TEXT,
+            affiliateUrl TEXT,
+            category VARCHAR(100),
+            status ENUM('published', 'failed') DEFAULT 'published',
+            channelsPublished JSON,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """)
+        
+        # Tabela de Logs de Execução
+>>>>>>> 1eaa45aba26854401bbb8cba46f01a4b246e24c5
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS executionLogs (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -85,6 +121,7 @@ def init_db():
                 createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+<<<<<<< HEAD
 
         # ── pipelineConfig (com campo paused para pausar/retomar) ──
         cursor.execute("""
@@ -110,6 +147,91 @@ def init_db():
             pass  # Coluna já existe ou banco não suporta IF NOT EXISTS
 
         # ── cacheItems ─────────────────────────────────────────
+=======
+        
+        # Tabela de Configuração do Pipeline
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pipelineConfig (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            scheduleTimes JSON,
+            keywords JSON,
+            maxPrice DECIMAL(10, 2),
+            minRating DECIMAL(3, 2),
+            activeCategories JSON,
+            paused BOOLEAN DEFAULT false,
+            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+        """)
+        
+        # Tabela de Aprovações de Conteúdo
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS contentApprovals (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            productId VARCHAR(255),
+            productName TEXT NOT NULL,
+            productPrice DECIMAL(10, 2),
+            productImage TEXT,
+            productDescription TEXT,
+            affiliateUrl TEXT,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            hashtags TEXT,
+            imageUrl TEXT,
+            prompt TEXT,
+            status ENUM('pending', 'approved', 'discarded') DEFAULT 'pending',
+            source ENUM('automatic', 'manual') DEFAULT 'automatic',
+            approvedAt DATETIME,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_status (status),
+            INDEX idx_source (source)
+        )
+        """)
+        
+        # Tabela de Postagens Manuais
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS manualPosts (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            productUrl TEXT NOT NULL,
+            productName TEXT NOT NULL,
+            productPrice DECIMAL(10, 2),
+            productImage TEXT,
+            productDescription TEXT,
+            affiliateUrl TEXT,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            hashtags TEXT,
+            imageUrl TEXT,
+            status ENUM('draft', 'published') DEFAULT 'draft',
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_status (status)
+        )
+        """)
+        
+        # Tabela de Postagens Aprovadas (Histórico)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS posts (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            contentApprovalId INT,
+            productId VARCHAR(255),
+            productName TEXT NOT NULL,
+            price DECIMAL(10, 2),
+            imageUrl TEXT,
+            affiliateUrl TEXT,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            hashtags TEXT,
+            category VARCHAR(100),
+            source ENUM('automatic', 'manual') DEFAULT 'automatic',
+            approvedAt DATETIME,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (contentApprovalId) REFERENCES contentApprovals(id)
+        )
+        """)
+        
+        # Tabela de Cache de Itens
+>>>>>>> 1eaa45aba26854401bbb8cba46f01a4b246e24c5
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS cacheItems (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -121,8 +243,13 @@ def init_db():
                 publishedAt DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+<<<<<<< HEAD
 
         # ── integrationStatus ──────────────────────────────────
+=======
+        
+        # Tabela de Status de Integração
+>>>>>>> 1eaa45aba26854401bbb8cba46f01a4b246e24c5
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS integrationStatus (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -133,6 +260,7 @@ def init_db():
                 lastCheckedAt DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+<<<<<<< HEAD
 
         # ── integrationSettings ────────────────────────────────
         cursor.execute("""
@@ -197,16 +325,39 @@ def init_db():
                 createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
+=======
+        
+        # Tabela de Configurações de Integração
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS integrationSettings (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            integrationName VARCHAR(64) NOT NULL UNIQUE,
+            metaAppId VARCHAR(255),
+            metaAppSecret VARCHAR(255),
+            metaPageAccessToken VARCHAR(255),
+            metaPageId VARCHAR(255),
+            metaInstagramAccountId VARCHAR(255),
+            telegramBotToken VARCHAR(255),
+            telegramChatId VARCHAR(255),
+            shopeeApiKey VARCHAR(255),
+            shopeePartnerId VARCHAR(255),
+            gtmId VARCHAR(255),
+            isActive BOOLEAN DEFAULT true NOT NULL,
+            createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+            INDEX idx_integrationName (integrationName)
+        )
+>>>>>>> 1eaa45aba26854401bbb8cba46f01a4b246e24c5
         """)
-
+        
         logger.info("✅ Todas as tabelas foram criadas ou já existem.")
+        
         cursor.close()
         conn.close()
-
+        
     except Exception as e:
         logger.error(f"❌ Erro ao inicializar banco de dados: {e}")
         raise
-
 
 if __name__ == "__main__":
     init_db()

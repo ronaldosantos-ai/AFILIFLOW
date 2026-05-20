@@ -251,3 +251,136 @@ def cleanup_image(image_path: str):
             logger.info(f"🗑️  Imagem temporária removida: {image_path}")
     except Exception as e:
         logger.warning(f"⚠️  Não foi possível remover {image_path}: {e}")
+
+# ─────────────────────────────────────────────────────────
+#  FASE 2: GERAÇÃO DE CONTEÚDO COM GEMINI
+# ─────────────────────────────────────────────────────────
+
+def generate_content_with_gemini(
+    product_title: str,
+    category_label: str,
+    price: float,
+    rating: float,
+    reviews: int,
+    product_description: str = "",
+    custom_prompt: str = None
+) -> dict:
+    """
+    Gera conteúdo completo (título, descrição, hashtags) com Gemini.
+    
+    Args:
+        product_title: Nome do produto
+        category_label: Categoria do produto
+        price: Preço do produto
+        rating: Avaliação do produto
+        reviews: Número de avaliações
+        product_description: Descrição do produto (opcional)
+        custom_prompt: Prompt customizado para regerar conteúdo (opcional)
+    
+    Returns:
+        dict com 'title', 'description', 'hashtags'
+    """
+    try:
+        # Seleciona gatilhos por categoria
+        category_key = category_label.replace(" ", "").replace("&", "And")
+        triggers = CATEGORY_TRIGGERS.get(category_key, DEFAULT_TRIGGERS)
+        
+        # Formata gatilhos
+        formatted_triggers = []
+        for trigger in triggers[:2]:  # Usa apenas 2 gatilhos
+            formatted_trigger = trigger.format(
+                reviews=reviews,
+                rating=f"{rating:.1f}"
+            )
+            formatted_triggers.append(formatted_trigger)
+        
+        triggers_text = "\n".join([f"- {t}" for t in formatted_triggers])
+        
+        # Monta o prompt
+        if custom_prompt:
+            prompt = custom_prompt
+        else:
+            prompt = f"""Você é um especialista em copywriting para redes sociais.
+            
+Gere conteúdo para uma postagem de produto afiliado com as seguintes informações:
+
+📦 Produto: {product_title}
+💰 Preço: R$ {price:.2f}
+⭐ Avaliação: {rating}/5 ({reviews} avaliações)
+📂 Categoria: {category_label}
+📝 Descrição: {product_description or 'Não fornecida'}
+
+Gatilhos de compra para esta categoria:
+{triggers_text}
+
+Por favor, gere:
+
+1. **Título**: Mantenha o nome original do produto SEM caixa alta. Máximo 60 caracteres.
+   Exemplo: "Fone Bluetooth 5.0 com cancelamento de ruído"
+
+2. **Descrição**: Uma descrição persuasiva com 150-200 caracteres que:
+   - Destaque os principais benefícios
+   - Inclua pelo menos um dos gatilhos acima
+   - Termine com um CTA ("Compre agora", "Aproveite", etc)
+   - Use emojis estrategicamente
+   - Seja adequada para Instagram/Telegram
+
+3. **Hashtags**: 8-10 hashtags relevantes separadas por espaço
+   - Inclua hashtags genéricas (#MelhoresOfertas, #Oferta, #Compras)
+   - Inclua hashtags específicas da categoria
+   - Inclua hashtags de trending (se aplicável)
+
+Responda em JSON com a seguinte estrutura:
+{{
+  "title": "...",
+  "description": "...",
+  "hashtags": "#hashtag1 #hashtag2 ..."
+}}"""
+        
+        # Chama Gemini
+        logger.info("🤖 Chamando Gemini para gerar conteúdo...")
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["TEXT"],
+            ),
+        )
+        
+        # Extrai resposta
+        response_text = response.candidates[0].content.parts[0].text
+        logger.info(f"📝 Resposta do Gemini:\n{response_text}")
+        
+        # Parse JSON
+        import json
+        import re
+        
+        # Tenta extrair JSON da resposta
+        json_match = re.search(r'\{[^{}]*\}', response_text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(0)
+            content = json.loads(json_str)
+        else:
+            # Fallback se não conseguir extrair JSON
+            logger.warning("⚠️  Não consegui extrair JSON. Usando valores padrão.")
+            content = {
+                "title": product_title,
+                "description": f"🔥 {product_title}\n💰 R$ {price:.2f}\n⭐ {rating}/5 ({reviews} avaliações)\n👉 Compre agora!",
+                "hashtags": f"#MelhoresOfertas #{category_label.replace(' ', '')} #Oferta #Compras #Shopee"
+            }
+        
+        logger.info(f"✅ Conteúdo gerado com sucesso!")
+        logger.info(f"   Título: {content.get('title', '')}")
+        logger.info(f"   Descrição: {content.get('description', '')[:50]}...")
+        logger.info(f"   Hashtags: {content.get('hashtags', '')[:50]}...")
+        
+        return content
+        
+    except Exception as e:
+        logger.error(f"❌ Erro ao gerar conteúdo com Gemini: {e}")
+        # Retorna conteúdo padrão em caso de erro
+        return {
+            "title": product_title,
+            "description": f"🔥 {product_title}\n💰 R$ {price:.2f}\n⭐ {rating}/5\n👉 Compre agora!",
+            "hashtags": "#MelhoresOfertas #Oferta #Compras #Shopee"
+        }

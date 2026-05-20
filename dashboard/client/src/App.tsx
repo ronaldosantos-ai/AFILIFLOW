@@ -15,6 +15,7 @@ import Logs from "./pages/Logs";
 import Cache from "./pages/Cache";
 import Integrations from "./pages/Integrations";
 import PublishManual from "./pages/PublishManual";
+import Scheduler from "./pages/Scheduler";
 
 function Router() {
   return (
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/cache" component={Cache} />
       <Route path="/integrations" component={Integrations} />
       <Route path="/publish-manual" component={PublishManual} />
+      <Route path="/scheduler" component={Scheduler} />
       <Route path="/admin/users" component={AdminUsers} />
       <Route path="/approvals" component={Approvals} />
       <Route path="/404" component={NotFound} />

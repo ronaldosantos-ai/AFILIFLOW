@@ -16,6 +16,9 @@ import {
   getManualPostsByUser,
   updateManualPost,
   deleteManualPost,
+  trackCopy,
+  getCopyHistory,
+  getCopyStats,
 } from "./db";
 import { registerUser, loginUser, getPendingUsers, authorizeUser, rejectUser } from "./auth";
 import type { User } from "../drizzle/schema";
@@ -314,6 +317,189 @@ export const appRouter = router({
           console.error('Error processing product URL:', error);
           throw new Error(error instanceof Error ? error.message : 'Failed to process product URL');
         }
+      }),
+    
+    
+    // Content Approvals
+    getContentApprovals: protectedProcedure
+      .input(z.object({ status: z.enum(['pending', 'approved', 'rejected', 'partially_approved']).optional() }))
+      .query(async ({ input }) => {
+        const db = await import('./db').then(m => m.getDb());
+        if (!db) throw new Error('Database not available');
+        const { contentApprovals } = await import('../drizzle/schema');
+        
+        if (input.status) {
+          return await db.select().from(contentApprovals).where(eq(contentApprovals.status, input.status));
+        }
+        return await db.select().from(contentApprovals);
+      }),
+    
+    approveContent: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await import('./db').then(m => m.getDb());
+        if (!db) throw new Error('Database not available');
+        const { contentApprovals } = await import('../drizzle/schema');
+        
+        await db.update(contentApprovals)
+          .set({ status: 'approved', approvedAt: new Date(), approvedBy: ctx.user?.id })
+          .where(eq(contentApprovals.id, input.id));
+        
+        return { success: true };
+      }),
+    
+    rejectContent: protectedProcedure
+      .input(z.object({ id: z.number(), reason: z.string().optional() }))
+      .mutation(async ({ input }) => {
+        const db = await import('./db').then(m => m.getDb());
+        if (!db) throw new Error('Database not available');
+        const { contentApprovals } = await import('../drizzle/schema');
+        
+        await db.update(contentApprovals)
+          .set({ status: 'rejected', rejectionReason: input.reason || null })
+          .where(eq(contentApprovals.id, input.id));
+        
+        return { success: true };
+      }),
+    
+    updateContentDescription: protectedProcedure
+      .input(z.object({ id: z.number(), description: z.string() }))
+      .mutation(async ({ input }) => {
+        const db = await import('./db').then(m => m.getDb());
+        if (!db) throw new Error('Database not available');
+        const { contentApprovals } = await import('../drizzle/schema');
+        
+        await db.update(contentApprovals)
+          .set({ description: input.description })
+          .where(eq(contentApprovals.id, input.id));
+        
+        return { success: true };
+      }),
+    
+    // Posts
+    getPosts: protectedProcedure
+      .input(z.object({ limit: z.number().default(20) }))
+      .query(async ({ input }) => {
+        const db = await import('./db').then(m => m.getDb());
+        if (!db) throw new Error('Database not available');
+        const { posts } = await import('../drizzle/schema');
+        return await db.select().from(posts).limit(input.limit);
+      }),
+    
+    deletePost: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await import('./db').then(m => m.getDb());
+        if (!db) throw new Error('Database not available');
+        const { posts } = await import('../drizzle/schema');
+        
+        await db.delete(posts).where(eq(posts.id, input.id));
+        return { success: true };
+      }),
+    
+    // Scheduler Settings
+    getSchedulerSettings: protectedProcedure.query(async () => {
+      const db = await import('./db').then(m => m.getDb());
+      if (!db) throw new Error('Database not available');
+      const { pipelineConfig } = await import('../drizzle/schema');
+      
+      const config = await db.select().from(pipelineConfig).limit(1);
+      return config[0] || { scheduleTimes: '[]', keywords: '[]', activeCategories: '[]', paused: false };
+    }),
+    
+    updateSchedulerSettings: protectedProcedure
+      .input(z.object({
+        scheduleTimes: z.array(z.string()).optional(),
+        keywords: z.array(z.string()).optional(),
+        maxPrice: z.number().optional(),
+        minRating: z.number().optional(),
+        activeCategories: z.array(z.string()).optional(),
+        paused: z.boolean().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await import('./db').then(m => m.getDb());
+        if (!db) throw new Error('Database not available');
+        const { pipelineConfig } = await import('../drizzle/schema');
+        
+        const config = await db.select().from(pipelineConfig).limit(1);
+        
+        if (config.length > 0) {
+          await db.update(pipelineConfig)
+            .set({
+              scheduleTimes: input.scheduleTimes ? JSON.stringify(input.scheduleTimes) : undefined,
+              keywords: input.keywords ? JSON.stringify(input.keywords) : undefined,
+              activeCategories: input.activeCategories ? JSON.stringify(input.activeCategories) : undefined,
+              paused: input.paused,
+            })
+            .where(eq(pipelineConfig.id, config[0].id));
+        } else {
+          await db.insert(pipelineConfig).values({
+            scheduleTimes: JSON.stringify(input.scheduleTimes || []),
+            keywords: JSON.stringify(input.keywords || []),
+            activeCategories: JSON.stringify(input.activeCategories || []),
+            paused: input.paused || false,
+          });
+        }
+        
+        return { success: true };
+      }),
+    
+    togglePipeline: protectedProcedure
+      .input(z.object({ paused: z.boolean() }))
+      .mutation(async ({ input }) => {
+        const db = await import('./db').then(m => m.getDb());
+        if (!db) throw new Error('Database not available');
+        const { pipelineConfig } = await import('../drizzle/schema');
+        
+        const config = await db.select().from(pipelineConfig).limit(1);
+        
+        if (config.length > 0) {
+          await db.update(pipelineConfig)
+            .set({ paused: input.paused })
+            .where(eq(pipelineConfig.id, config[0].id));
+        } else {
+          await db.insert(pipelineConfig).values({
+            paused: input.paused,
+            scheduleTimes: JSON.stringify([]),
+            keywords: JSON.stringify([]),
+            activeCategories: JSON.stringify([]),
+          });
+        }
+        
+        return { success: true };
+      }),
+  }),
+  
+  tracking: router({
+    trackCopy: protectedProcedure
+      .input(z.object({
+        contentApprovalId: z.number(),
+        fieldName: z.string(),
+        copiedText: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        return await trackCopy({
+          contentApprovalId: input.contentApprovalId,
+          fieldName: input.fieldName,
+          copiedText: input.copiedText,
+          userId: ctx.user?.id,
+        });
+      }),
+    
+    getCopyHistory: protectedProcedure
+      .input(z.object({
+        contentApprovalId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        return await getCopyHistory(input.contentApprovalId);
+      }),
+    
+    getCopyStats: protectedProcedure
+      .input(z.object({
+        contentApprovalId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        return await getCopyStats(input.contentApprovalId);
       }),
   }),
 });

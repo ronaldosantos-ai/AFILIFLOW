@@ -287,3 +287,220 @@ def get_recent_posts(limit: int = 10) -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"❌ Erro ao buscar posts recentes: {e}")
         return []
+
+
+# ─────────────────────────────────────────────────────────
+#  FASE 1: PIPELINE E SCHEDULER
+# ─────────────────────────────────────────────────────────
+
+def is_pipeline_paused() -> bool:
+    """Verifica se o pipeline está pausado."""
+    try:
+        with DatabaseConnection() as db:
+            if not db.connection:
+                logger.warning("⚠️  Banco de dados não disponível. Assumindo pipeline ativo.")
+                return False
+            
+            query = "SELECT paused FROM pipelineConfig LIMIT 1"
+            db.cursor.execute(query)
+            result = db.cursor.fetchone()
+            
+            if result:
+                return bool(result.get('paused', False))
+            return False
+    except Exception as e:
+        logger.error(f"❌ Erro ao verificar status do pipeline: {e}")
+        return False
+
+def get_schedule_times() -> List[str]:
+    """Obtém os horários agendados do banco de dados."""
+    try:
+        with DatabaseConnection() as db:
+            if not db.connection:
+                logger.warning("⚠️  Banco de dados não disponível. Usando horários padrão.")
+                return ["09:00", "14:00", "18:00"]
+            
+            query = "SELECT scheduleTimes FROM pipelineConfig LIMIT 1"
+            db.cursor.execute(query)
+            result = db.cursor.fetchone()
+            
+            if result and result.get('scheduleTimes'):
+                import json
+                times = json.loads(result['scheduleTimes'])
+                logger.info(f"✅ Horários carregados do banco: {times}")
+                return times
+            
+            logger.warning("⚠️  Nenhum horário configurado no banco.")
+            return []
+    except Exception as e:
+        logger.error(f"❌ Erro ao carregar horários: {e}")
+        return []
+
+def create_content_approval(
+    product_id: str,
+    product_name: str,
+    product_price: float,
+    product_image: str,
+    product_description: str,
+    affiliate_url: str,
+    title: str,
+    description: str,
+    hashtags: str,
+    image_url: str,
+    source: str = 'automatic',
+    prompt: str = None
+) -> Optional[int]:
+    """Cria um novo conteúdo para aprovação."""
+    try:
+        with DatabaseConnection() as db:
+            if not db.connection:
+                logger.warning("⚠️  Banco de dados não disponível.")
+                return None
+            
+            query = """
+            INSERT INTO contentApprovals (
+                productId, productName, productPrice, productImage, productDescription,
+                affiliateUrl, title, description, hashtags, imageUrl, prompt, source, status
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+            """
+            
+            values = (
+                product_id, product_name, product_price, product_image, product_description,
+                affiliate_url, title, description, hashtags, image_url, prompt, source
+            )
+            
+            db.cursor.execute(query, values)
+            approval_id = db.cursor.lastrowid
+            
+            logger.info(f"✅ Conteúdo criado em contentApprovals (ID: {approval_id})")
+            return approval_id
+    except Exception as e:
+        logger.error(f"❌ Erro ao criar conteúdo para aprovação: {e}")
+        return None
+
+def get_pending_approvals(limit: int = 20) -> List[Dict[str, Any]]:
+    """Obtém conteúdos pendentes de aprovação."""
+    try:
+        with DatabaseConnection() as db:
+            if not db.connection:
+                logger.warning("⚠️  Banco de dados não disponível.")
+                return []
+            
+            query = """
+            SELECT * FROM contentApprovals 
+            WHERE status = 'pending' 
+            ORDER BY createdAt DESC 
+            LIMIT %s
+            """
+            
+            db.cursor.execute(query, (limit,))
+            results = db.cursor.fetchall()
+            
+            logger.info(f"✅ {len(results)} conteúdos pendentes carregados.")
+            return results
+    except Exception as e:
+        logger.error(f"❌ Erro ao buscar conteúdos pendentes: {e}")
+        return []
+
+def approve_content(approval_id: int) -> bool:
+    """Aprova um conteúdo e move para posts."""
+    try:
+        with DatabaseConnection() as db:
+            if not db.connection:
+                logger.warning("⚠️  Banco de dados não disponível.")
+                return False
+            
+            # Atualiza status em contentApprovals
+            query = """
+            UPDATE contentApprovals 
+            SET status = 'approved', approvedAt = NOW() 
+            WHERE id = %s
+            """
+            db.cursor.execute(query, (approval_id,))
+            
+            # Copia para posts (histórico)
+            query = """
+            INSERT INTO posts (
+                contentApprovalId, productId, productName, price, imageUrl, 
+                affiliateUrl, title, description, hashtags, source, approvedAt
+            )
+            SELECT 
+                id, productId, productName, productPrice, imageUrl,
+                affiliateUrl, title, description, hashtags, source, NOW()
+            FROM contentApprovals
+            WHERE id = %s
+            """
+            db.cursor.execute(query, (approval_id,))
+            
+            logger.info(f"✅ Conteúdo {approval_id} aprovado e movido para posts.")
+            return True
+    except Exception as e:
+        logger.error(f"❌ Erro ao aprovar conteúdo: {e}")
+        return False
+
+def discard_content(approval_id: int) -> bool:
+    """Descarta um conteúdo."""
+    try:
+        with DatabaseConnection() as db:
+            if not db.connection:
+                logger.warning("⚠️  Banco de dados não disponível.")
+                return False
+            
+            query = """
+            UPDATE contentApprovals 
+            SET status = 'discarded' 
+            WHERE id = %s
+            """
+            db.cursor.execute(query, (approval_id,))
+            
+            logger.info(f"✅ Conteúdo {approval_id} descartado.")
+            return True
+    except Exception as e:
+        logger.error(f"❌ Erro ao descartar conteúdo: {e}")
+        return False
+
+def update_pipeline_pause(paused: bool) -> bool:
+    """Atualiza o status de pausa do pipeline."""
+    try:
+        with DatabaseConnection() as db:
+            if not db.connection:
+                logger.warning("⚠️  Banco de dados não disponível.")
+                return False
+            
+            query = """
+            UPDATE pipelineConfig 
+            SET paused = %s 
+            WHERE id = 1
+            """
+            db.cursor.execute(query, (paused,))
+            
+            status = "pausado" if paused else "retomado"
+            logger.info(f"✅ Pipeline {status}.")
+            return True
+    except Exception as e:
+        logger.error(f"❌ Erro ao atualizar status do pipeline: {e}")
+        return False
+
+def update_schedule_times(times: List[str]) -> bool:
+    """Atualiza os horários agendados."""
+    try:
+        with DatabaseConnection() as db:
+            if not db.connection:
+                logger.warning("⚠️  Banco de dados não disponível.")
+                return False
+            
+            import json
+            times_json = json.dumps(times)
+            
+            query = """
+            UPDATE pipelineConfig 
+            SET scheduleTimes = %s 
+            WHERE id = 1
+            """
+            db.cursor.execute(query, (times_json,))
+            
+            logger.info(f"✅ Horários atualizados: {times}")
+            return True
+    except Exception as e:
+        logger.error(f"❌ Erro ao atualizar horários: {e}")
+        return False
