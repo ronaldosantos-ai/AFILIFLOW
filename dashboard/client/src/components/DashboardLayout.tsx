@@ -1,4 +1,3 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -21,23 +20,36 @@ import {
 } from "@/components/ui/sidebar";
 import { useCustomAuth } from "@/hooks/useCustomAuth";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, CheckCircle, Plus, Clock } from "lucide-react";
+import {
+  BarChart2,
+  CheckCircle,
+  Clock,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  PanelLeft,
+  PenLine,
+  Settings,
+  Users,
+} from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
+import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 
+// ── Menu na ordem definida ──────────────────────────────
 const menuItems = [
-  { icon: LayoutDashboard, label: "Métricas", path: "/" },
-  { icon: Users, label: "Postagens", path: "/posts" },
-  { icon: Plus, label: "Publicar Manual", path: "/publish-manual" },
-  { icon: CheckCircle, label: "Aprovações", path: "/approvals" },
-  { icon: Clock, label: "Agendador", path: "/scheduler" },
-  { icon: Users, label: "Usuários", path: "/admin/users" },
-  { icon: LayoutDashboard, label: "Configurações", path: "/config" },
-  { icon: LayoutDashboard, label: "Logs", path: "/logs" },
-  { icon: LayoutDashboard, label: "Cache", path: "/cache" },
-  { icon: LayoutDashboard, label: "Integrações", path: "/integrations" },
+  { icon: LayoutDashboard, label: "Dashboard",      path: "/" },
+  { icon: BarChart2,       label: "Métricas",       path: "/metrics" },
+  { icon: CheckCircle,     label: "Aprovações",     path: "/approvals" },
+  { icon: FileText,        label: "Postagens",      path: "/posts" },
+  { icon: PenLine,         label: "Publicar Manual",path: "/publish-manual" },
+  { icon: Clock,           label: "Agendador",      path: "/scheduler" },
+  { icon: Settings,        label: "Configurações",  path: "/config" },
+  { icon: Users,           label: "Usuários",       path: "/admin/users" },
+  { icon: LayoutDashboard, label: "Integrações",    path: "/integrations" },
+  { icon: LayoutDashboard, label: "Logs",           path: "/logs" },
+  { icon: LayoutDashboard, label: "Cache",          path: "/cache" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -61,7 +73,7 @@ export default function DashboardLayout({
   }, [sidebarWidth]);
 
   if (loading) {
-    return <DashboardLayoutSkeleton />
+    return <DashboardLayoutSkeleton />;
   }
 
   if (!user) {
@@ -73,13 +85,11 @@ export default function DashboardLayout({
               Sign in to continue
             </h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Access to this dashboard requires authentication. Continue to launch the login flow.
+              Access to this dashboard requires authentication.
             </p>
           </div>
           <Button
-            onClick={() => {
-              window.location.href = '/login';
-            }}
+            onClick={() => { window.location.href = "/login"; }}
             size="lg"
             className="w-full shadow-lg hover:shadow-xl transition-all"
           >
@@ -92,11 +102,7 @@ export default function DashboardLayout({
 
   return (
     <SidebarProvider
-      style={
-        {
-          "--sidebar-width": `${sidebarWidth}px`,
-        } as CSSProperties
-      }
+      style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
     >
       <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
         {children}
@@ -120,29 +126,23 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
+  const activeMenuItem = menuItems.find((item) => item.path === location);
   const isMobile = useIsMobile();
 
   useEffect(() => {
-    if (isCollapsed) {
-      setIsResizing(false);
-    }
+    if (isCollapsed) setIsResizing(false);
   }, [isCollapsed]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return;
-
       const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
       const newWidth = e.clientX - sidebarLeft;
       if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
         setSidebarWidth(newWidth);
       }
     };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
+    const handleMouseUp = () => setIsResizing(false);
 
     if (isResizing) {
       document.addEventListener("mousemove", handleMouseMove);
@@ -150,7 +150,6 @@ function DashboardLayoutContent({
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
     }
-
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
@@ -162,11 +161,7 @@ function DashboardLayoutContent({
   return (
     <>
       <div className="relative" ref={sidebarRef}>
-        <Sidebar
-          collapsible="icon"
-          className="border-r-0"
-          disableTransition={isResizing}
-        >
+        <Sidebar collapsible="icon" className="border-r-0" disableTransition={isResizing}>
           <SidebarHeader className="h-16 justify-center">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
@@ -176,19 +171,17 @@ function DashboardLayoutContent({
               >
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
-              {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate text-accent">
-                    AfiliFlow
-                  </span>
-                </div>
-              ) : null}
+              {!isCollapsed && (
+                <span className="font-semibold tracking-tight truncate text-accent">
+                  AfiliFlow
+                </span>
+              )}
             </div>
           </SidebarHeader>
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
+              {menuItems.map((item) => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -196,11 +189,9 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
+                      className="h-10 transition-all font-normal"
                     >
-                      <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
-                      />
+                      <item.icon className={`h-4 w-4 ${isActive ? "text-primary" : ""}`} />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -240,12 +231,10 @@ function DashboardLayoutContent({
             </DropdownMenu>
           </SidebarFooter>
         </Sidebar>
+
         <div
           className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
-          onMouseDown={() => {
-            if (isCollapsed) return;
-            setIsResizing(true);
-          }}
+          onMouseDown={() => { if (!isCollapsed) setIsResizing(true); }}
           style={{ zIndex: 50 }}
         />
       </div>
@@ -255,13 +244,9 @@ function DashboardLayoutContent({
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col gap-1">
-                  <span className="tracking-tight text-foreground">
-                    {activeMenuItem?.label ?? "Menu"}
-                  </span>
-                </div>
-              </div>
+              <span className="tracking-tight text-foreground">
+                {activeMenuItem?.label ?? "Menu"}
+              </span>
             </div>
           </div>
         )}
