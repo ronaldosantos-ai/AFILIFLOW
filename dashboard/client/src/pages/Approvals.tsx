@@ -2,90 +2,111 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Copy, Check, Trash2, ThumbsUp } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, Copy, Check, Trash2, ThumbsUp, Image } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
 
 export default function Approvals() {
-  const [selectedApproval, setSelectedApproval] = useState<any | null>(null);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [selected, setSelected] = useState<any | null>(null);
+  const [copied, setCopied] = useState<Record<string, boolean>>({});
+  const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editHashtags, setEditHashtags] = useState("");
 
-  const approvalsQuery = trpc.dashboard.getContentApprovals.useQuery({
-    status: "pending",
-  });
+  const approvalsQuery = trpc.dashboard.getContentApprovals.useQuery({ status: "pending" });
   const approveContentMutation = trpc.dashboard.approveContent.useMutation();
   const rejectContentMutation = trpc.dashboard.rejectContent.useMutation();
   const updateDescriptionMutation = trpc.dashboard.updateContentDescription.useMutation();
 
-  const trackCopyMutation = trpc.tracking.trackCopy.useMutation();
-
-  const handleCopy = async (text: string, field: string) => {
+  const handleCopy = (text: string, field: string) => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    toast.success("Copiado!");
-    
-    if (selectedApproval?.id) {
-      try {
-        await trackCopyMutation.mutateAsync({
-          contentApprovalId: selectedApproval.id,
-          fieldName: field,
-          copiedText: text.substring(0, 100),
-        });
-      } catch (error) {
-        console.error("Error tracking copy:", error);
-      }
-    }
-    
-    setTimeout(() => setCopiedField(null), 2000);
+    setCopied((prev) => ({ ...prev, [field]: true }));
+    toast.success(`${field} copiado!`);
+    setTimeout(() => setCopied((prev) => ({ ...prev, [field]: false })), 3000);
   };
 
-  const handleApprove = async (id: number) => {
+  const handleCopyImage = async (imageUrl: string) => {
     try {
-      await approveContentMutation.mutateAsync({ id });
-      toast.success("Conteúdo aprovado!");
-      setSelectedApproval(null);
-      await approvalsQuery.refetch();
-    } catch (error) {
-      toast.error("Erro ao aprovar conteúdo");
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob }),
+      ]);
+      setCopied((prev) => ({ ...prev, image: true }));
+      toast.success("Imagem copiada!");
+      setTimeout(() => setCopied((prev) => ({ ...prev, image: false })), 3000);
+    } catch {
+      // Fallback: copia a URL da imagem
+      handleCopy(imageUrl, "image");
+      toast.info("URL da imagem copiada (abra e salve a imagem manualmente)");
     }
   };
 
-  const handleReject = async (id: number) => {
-    if (!confirm("Tem certeza que deseja rejeitar este conteúdo?")) return;
-
-    try {
-      await rejectContentMutation.mutateAsync({ id, reason: "Rejeitado pelo usuário" });
-      toast.success("Conteúdo rejeitado");
-      setSelectedApproval(null);
-      await approvalsQuery.refetch();
-    } catch (error) {
-      toast.error("Erro ao rejeitar conteúdo");
-    }
+  const handleSelect = (approval: any) => {
+    setSelected(approval);
+    setEditTitle(approval.generatedTitle || approval.title || approval.productName || "");
+    setEditDescription(approval.generatedDescription || approval.description || "");
+    setEditHashtags(approval.generatedHashtags || approval.hashtags || "");
+    setCopied({});
   };
 
-  const handleUpdateDescription = async (id: number) => {
-    if (!editDescription.trim()) {
-      toast.error("Digite uma descrição");
-      return;
-    }
-
+  const handleSave = async () => {
+    if (!selected) return;
     try {
       await updateDescriptionMutation.mutateAsync({
-        id,
+        id: selected.id,
         description: editDescription,
       });
-      toast.success("Descrição atualizada!");
-      setSelectedApproval({ ...selectedApproval, description: editDescription });
-      setEditDescription("");
-    } catch (error) {
-      toast.error("Erro ao atualizar descrição");
+      toast.success("Conteúdo salvo!");
+    } catch {
+      toast.error("Erro ao salvar");
     }
   };
+
+  const handleApprove = async () => {
+    if (!selected) return;
+    try {
+      await approveContentMutation.mutateAsync({ id: selected.id });
+      toast.success("✅ Aprovado e movido para Postagens!");
+      setSelected(null);
+      await approvalsQuery.refetch();
+    } catch {
+      toast.error("Erro ao aprovar");
+    }
+  };
+
+  const handleDiscard = async () => {
+    if (!selected) return;
+    if (!confirm("Descartar este conteúdo permanentemente?")) return;
+    try {
+      await rejectContentMutation.mutateAsync({ id: selected.id, reason: "Descartado pelo admin" });
+      toast.success("Conteúdo descartado");
+      setSelected(null);
+      await approvalsQuery.refetch();
+    } catch {
+      toast.error("Erro ao descartar");
+    }
+  };
+
+  const CopyButton = ({ field, value, label }: { field: string; value: string; label?: string }) => (
+    <Button
+      onClick={() => handleCopy(value, field)}
+      size="sm"
+      variant={copied[field] ? "default" : "outline"}
+      className={`h-auto p-2 gap-1 transition-all ${copied[field] ? "bg-green-600 text-white border-green-600" : ""}`}
+    >
+      {copied[field] ? (
+        <><Check className="w-3 h-3" />{label ? "Copiado!" : ""}</>
+      ) : (
+        <><Copy className="w-3 h-3" />{label || ""}</>
+      )}
+    </Button>
+  );
 
   return (
     <DashboardLayout>
@@ -98,12 +119,13 @@ export default function Approvals() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+          {/* Lista de pendentes */}
+          <div className="lg:col-span-1">
             <Card className="bg-card border-border">
               <CardHeader>
-                <CardTitle>Conteúdo Pendente</CardTitle>
+                <CardTitle>Pendentes</CardTitle>
                 <CardDescription>
-                  {approvalsQuery.data?.length || 0} itens aguardando aprovação
+                  {approvalsQuery.data?.length || 0} itens aguardando
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -112,39 +134,30 @@ export default function Approvals() {
                     <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                   </div>
                 ) : approvalsQuery.data && approvalsQuery.data.length > 0 ? (
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
                     {approvalsQuery.data.map((approval: any) => (
                       <button
                         key={approval.id}
-                        onClick={() => {
-                          setSelectedApproval(approval);
-                          setEditDescription(approval.description || "");
-                        }}
-                        className={`w-full text-left p-4 rounded-lg border transition ${
-                          selectedApproval?.id === approval.id
-                            ? "bg-blue-50 dark:bg-blue-900/20 border-blue-500 shadow-md"
-                            : "bg-card border-border hover:border-blue-400"
+                        onClick={() => handleSelect(approval)}
+                        className={`w-full text-left p-3 rounded-lg border transition-all ${
+                          selected?.id === approval.id
+                            ? "bg-primary/10 border-primary shadow-md"
+                            : "bg-card border-border hover:border-primary/50"
                         }`}
                       >
-                        {approval.productImage && (
+                        {(approval.imageUrl || approval.productImage) && (
                           <img
-                            src={approval.productImage}
+                            src={approval.imageUrl || approval.productImage}
                             alt={approval.productName}
-                            className="w-full h-24 object-cover rounded mb-2"
+                            className="w-full h-28 object-cover rounded mb-2"
                           />
                         )}
-
                         <div className="space-y-1">
-                          <h3 className="font-semibold text-sm text-foreground line-clamp-1">
-                            {approval.productName}
+                          <h3 className="font-semibold text-sm text-foreground line-clamp-2">
+                            {approval.generatedTitle || approval.title || approval.productName}
                           </h3>
-                          <p className="text-xs text-muted-foreground line-clamp-2">
-                            {approval.description}
-                          </p>
-                          <div className="flex items-center justify-between pt-2">
-                            <Badge variant="outline" className="text-xs">
-                              {approval.status === "pending" ? "⏳ Pendente" : approval.status}
-                            </Badge>
+                          <div className="flex items-center justify-between pt-1">
+                            <Badge variant="outline" className="text-xs">⏳ Pendente</Badge>
                             <span className="text-xs text-muted-foreground">
                               {new Date(approval.createdAt).toLocaleDateString("pt-BR")}
                             </span>
@@ -155,182 +168,144 @@ export default function Approvals() {
                   </div>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
-                    ✨ Nenhum conteúdo pendente. Tudo limpo!
+                    ✅ Nenhum conteúdo pendente!
                   </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          {selectedApproval && (
-            <div className="space-y-4">
+          {/* Painel de edição */}
+          {selected ? (
+            <div className="lg:col-span-2 space-y-4">
+
+              {/* Imagem */}
+              {(selected.imageUrl || selected.productImage) && (
+                <Card className="bg-card border-border">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">Imagem</CardTitle>
+                      <Button
+                        onClick={() => handleCopyImage(selected.imageUrl || selected.productImage)}
+                        size="sm"
+                        variant={copied["image"] ? "default" : "outline"}
+                        className={`gap-2 ${copied["image"] ? "bg-green-600 text-white border-green-600" : ""}`}
+                      >
+                        {copied["image"] ? (
+                          <><Check className="w-4 h-4" /> Copiada!</>
+                        ) : (
+                          <><Image className="w-4 h-4" /> Copiar Imagem</>
+                        )}
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <img
+                      src={selected.imageUrl || selected.productImage}
+                      alt="Produto"
+                      className="w-full max-h-64 object-cover rounded border border-border"
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Título */}
               <Card className="bg-card border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">Detalhes</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 text-sm">
-                  {selectedApproval.productImage && (
-                    <div>
-                      <Label className="text-xs font-semibold text-muted-foreground">
-                        Imagem Original
-                      </Label>
-                      <img
-                        src={selectedApproval.productImage}
-                        alt="Product"
-                        className="mt-2 w-full h-20 object-cover rounded"
-                      />
-                    </div>
-                  )}
-
-                  <div>
-                    <Label className="text-xs font-semibold text-muted-foreground">
-                      Produto
-                    </Label>
-                    <p className="text-foreground mt-1">{selectedApproval.productName}</p>
+                <CardContent className="pt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold">Título</Label>
+                    <CopyButton field="title" value={editTitle} label="Copiar" />
                   </div>
-
-                  {selectedApproval.affiliateUrl && (
-                    <div>
-                      <Label className="text-xs font-semibold text-muted-foreground">
-                        Link de Afiliado (Copiar e Colar)
-                      </Label>
-                      <div className="flex gap-1 mt-1">
-                        <input
-                          type="text"
-                          value={selectedApproval.affiliateUrl}
-                          readOnly
-                          className="flex-1 px-2 py-1 text-xs bg-muted rounded border border-border"
-                        />
-                        <Button
-                          onClick={() => handleCopy(selectedApproval.affiliateUrl, "url")}
-                          size="sm"
-                          variant="outline"
-                          className="h-auto p-1"
-                          title="Copiar link"
-                        >
-                          {copiedField === "url" ? (
-                            <Check className="w-3 h-3 text-green-600" />
-                          ) : (
-                            <Copy className="w-3 h-3" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                  <Input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="text-sm"
+                  />
                 </CardContent>
               </Card>
-            </div>
-          )}
-        </div>
 
-        {selectedApproval && (
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle>Editar Conteúdo</CardTitle>
-              <CardDescription>Revise e edite antes de aprovar</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-sm font-semibold">Descrição (Copiar e Colar)</Label>
-                  <Button
-                    onClick={() => handleCopy(editDescription, "description")}
-                    size="sm"
-                    variant="outline"
-                    className="h-auto p-2 gap-1"
-                    title="Copiar descrição"
-                  >
-                    {copiedField === "description" ? (
-                      <>
-                        <Check className="w-4 h-4 text-green-600" />
-                        Copiado!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4" />
-                        Copiar
-                      </>
-                    )}
-                  </Button>
-                </div>
-                <Textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  className="min-h-24 text-sm"
-                />
-              </div>
-
-              {selectedApproval.hashtags && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-sm font-semibold">Hashtags (Copiar e Colar)</Label>
-                    <Button
-                      onClick={() => handleCopy(selectedApproval.hashtags, "hashtags")}
-                      size="sm"
-                      variant="outline"
-                      className="h-auto p-2 gap-1"
-                      title="Copiar hashtags"
-                    >
-                      {copiedField === "hashtags" ? (
-                        <>
-                          <Check className="w-4 h-4 text-green-600" />
-                          Copiado!
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-4 h-4" />
-                          Copiar
-                        </>
-                      )}
-                    </Button>
+              {/* Descrição */}
+              <Card className="bg-card border-border">
+                <CardContent className="pt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold">Descrição</Label>
+                    <CopyButton field="description" value={editDescription} label="Copiar" />
                   </div>
-                  <input
-                    type="text"
-                    value={selectedApproval.hashtags}
-                    readOnly
-                    className="w-full px-3 py-2 text-sm bg-muted rounded border border-border"
+                  <Textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className="min-h-32 text-sm"
                   />
-                </div>
+                </CardContent>
+              </Card>
+
+              {/* Hashtags */}
+              <Card className="bg-card border-border">
+                <CardContent className="pt-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold">Hashtags</Label>
+                    <CopyButton field="hashtags" value={editHashtags} label="Copiar" />
+                  </div>
+                  <Input
+                    value={editHashtags}
+                    onChange={(e) => setEditHashtags(e.target.value)}
+                    className="text-sm"
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Link de afiliado */}
+              {selected.affiliateUrl && (
+                <Card className="bg-card border-border">
+                  <CardContent className="pt-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-semibold">Link de Afiliado</Label>
+                      <CopyButton field="link" value={selected.affiliateUrl} label="Copiar" />
+                    </div>
+                    <Input
+                      value={selected.affiliateUrl}
+                      readOnly
+                      className="text-sm bg-muted"
+                    />
+                  </CardContent>
+                </Card>
               )}
 
-              {selectedApproval.imageUrl && (
-                <div>
-                  <Label className="text-sm font-semibold mb-2 block">Imagem Gerada</Label>
-                  <img
-                    src={selectedApproval.imageUrl}
-                    alt="Generated"
-                    className="w-full h-32 object-cover rounded border border-border"
-                  />
-                </div>
-              )}
-
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded border border-blue-200 dark:border-blue-800">
-                <p className="text-sm text-blue-900 dark:text-blue-100">
-                  💡 <strong>Como usar:</strong> Copie cada campo acima e cole manualmente no Facebook, Instagram ou Telegram.
-                </p>
-              </div>
-
-              <div className="flex gap-2 pt-4 border-t">
+              {/* Ações */}
+              <div className="flex gap-3">
                 <Button
-                  onClick={() => handleUpdateDescription(selectedApproval.id)}
+                  onClick={handleSave}
                   variant="outline"
-                  className="flex-1 gap-2"
+                  className="flex-1"
+                  disabled={updateDescriptionMutation.isPending}
                 >
-                  Salvar Edição
+                  {updateDescriptionMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : "Salvar Edições"}
                 </Button>
-
                 <Button
-                  onClick={() => handleReject(selectedApproval.id)}
+                  onClick={handleDiscard}
                   variant="destructive"
                   className="flex-1 gap-2"
                 >
                   <Trash2 className="w-4 h-4" />
-                  Rejeitar
+                  Descartar
+                </Button>
+                <Button
+                  onClick={handleApprove}
+                  className="flex-1 gap-2 bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <ThumbsUp className="w-4 h-4" />
+                  Aprovar
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          ) : (
+            <div className="lg:col-span-2 flex items-center justify-center text-muted-foreground">
+              <p>← Selecione um item para revisar</p>
+            </div>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );
