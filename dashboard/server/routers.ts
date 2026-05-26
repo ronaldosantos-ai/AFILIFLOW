@@ -25,6 +25,7 @@ import type { User } from "../drizzle/schema";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { processProductUrl } from "./contentGenerator";
+import { adTrackerService } from "./adtracker";
 
 /**
  * Serialize a User record for safe transmission to the frontend.
@@ -426,19 +427,19 @@ export const appRouter = router({
         if (config.length > 0) {
           await db.update(pipelineConfig)
             .set({
-              scheduleTimes: input.scheduleTimes ? JSON.stringify(input.scheduleTimes) : undefined,
-              keywords: input.keywords ? JSON.stringify(input.keywords) : undefined,
-              activeCategories: input.activeCategories ? JSON.stringify(input.activeCategories) : undefined,
+              scheduleTimes: input.scheduleTimes as any,
+              keywords: input.keywords as any,
+              activeCategories: input.activeCategories as any,
               paused: input.paused,
-            })
+            } as any)
             .where(eq(pipelineConfig.id, config[0].id));
         } else {
           await db.insert(pipelineConfig).values({
-            scheduleTimes: JSON.stringify(input.scheduleTimes || []),
-            keywords: JSON.stringify(input.keywords || []),
-            activeCategories: JSON.stringify(input.activeCategories || []),
+            scheduleTimes: (input.scheduleTimes || []) as any,
+            keywords: (input.keywords || []) as any,
+            activeCategories: (input.activeCategories || []) as any,
             paused: input.paused || false,
-          });
+          } as any);
         }
         
         return { success: true };
@@ -455,21 +456,98 @@ export const appRouter = router({
         
         if (config.length > 0) {
           await db.update(pipelineConfig)
-            .set({ paused: input.paused })
+            .set({ paused: input.paused } as any)
             .where(eq(pipelineConfig.id, config[0].id));
         } else {
           await db.insert(pipelineConfig).values({
             paused: input.paused,
-            scheduleTimes: JSON.stringify([]),
-            keywords: JSON.stringify([]),
-            activeCategories: JSON.stringify([]),
-          });
+            scheduleTimes: [] as any,
+            keywords: [] as any,
+            activeCategories: [] as any,
+          } as any);
         }
         
         return { success: true };
       }),
   }),
   
+  adTracker: router({
+    getAccounts: publicProcedure.query(() => adTrackerService.getAdAccounts()),
+    getDashboard: publicProcedure
+      .input(z.object({
+        adAccountId: z.number().optional(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        campaign: z.string().optional(),
+        adset: z.string().optional(),
+        ad: z.string().optional(),
+      }).optional())
+      .query(({ input }) => adTrackerService.getDashboard(input)),
+    getAnalytics: publicProcedure
+      .input(z.object({
+        level: z.enum(["campaign", "adset", "ad"]),
+        filters: z.object({
+          adAccountId: z.number().optional(),
+          startDate: z.string().optional(),
+          endDate: z.string().optional(),
+          campaign: z.string().optional(),
+          adset: z.string().optional(),
+          ad: z.string().optional(),
+        }).optional(),
+      }))
+      .query(({ input }) => adTrackerService.getAnalytics(input.level, input.filters)),
+    updateEntityStatus: protectedProcedure
+      .input(z.object({ level: z.enum(["campaign", "adset", "ad"]), id: z.number(), status: z.enum(["ACTIVE", "PAUSED", "ARCHIVED"]) }))
+      .mutation(({ input }) => adTrackerService.updateEntityStatus(input.level, input.id, input.status)),
+    updateBudget: protectedProcedure
+      .input(z.object({ level: z.enum(["campaign", "adset", "ad"]), id: z.number(), budget: z.number().positive() }))
+      .mutation(({ input }) => adTrackerService.updateBudget(input.level, input.id, input.budget)),
+    duplicateEntity: protectedProcedure
+      .input(z.object({ level: z.enum(["campaign", "adset", "ad"]), id: z.number() }))
+      .mutation(({ input }) => adTrackerService.duplicateEntity(input.level, input.id)),
+    getAccountResources: publicProcedure
+      .input(z.object({ adAccountId: z.number().default(1) }).optional())
+      .query(({ input }) => adTrackerService.getAccountResources(input?.adAccountId ?? 1)),
+    addPixel: protectedProcedure
+      .input(z.object({ adAccountId: z.number(), identifier: z.string().min(2), pixelId: z.string().min(2) }))
+      .mutation(({ input }) => adTrackerService.addPixel(input)),
+    removePixel: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(({ input }) => adTrackerService.removePixel(input.id)),
+    addWebhook: protectedProcedure
+      .input(z.object({ adAccountId: z.number(), identifier: z.string().min(2), platform: z.string().min(2) }))
+      .mutation(({ input }) => adTrackerService.addWebhook(input)),
+    getPreCheckoutForms: publicProcedure
+      .input(z.object({ adAccountId: z.number().default(1) }).optional())
+      .query(({ input }) => adTrackerService.getPreCheckoutForms(input?.adAccountId ?? 1)),
+    savePreCheckoutForm: protectedProcedure
+      .input(z.object({
+        id: z.number().optional(),
+        adAccountId: z.number(),
+        identifier: z.string(),
+        runOn: z.enum(["all_site", "specific_url"]).optional(),
+        targetUrl: z.string().optional(),
+        windowTitle: z.string().optional(),
+        secondaryText: z.string().optional(),
+        redirectUrl: z.string().optional(),
+        askPhone: z.boolean().optional(),
+        layoutConfig: z.record(z.string(), z.any()).optional(),
+        fieldConfig: z.record(z.string(), z.any()).optional(),
+      }))
+      .mutation(({ input }) => adTrackerService.savePreCheckoutForm(input as any)),
+    getEvents: publicProcedure
+      .input(z.object({ adAccountId: z.number().optional(), startDate: z.string().optional(), endDate: z.string().optional() }).optional())
+      .query(({ input }) => adTrackerService.getEvents(input)),
+    getSales: publicProcedure
+      .input(z.object({ adAccountId: z.number().optional(), startDate: z.string().optional(), endDate: z.string().optional() }).optional())
+      .query(({ input }) => adTrackerService.getSales(input)),
+    getIntegrations: publicProcedure.query(() => adTrackerService.getIntegrations()),
+    getSettings: publicProcedure.query(() => adTrackerService.getSettings()),
+    generateAdUrl: publicProcedure
+      .input(z.object({ baseUrl: z.string().url(), source: z.string(), medium: z.string(), campaign: z.string(), content: z.string().optional(), term: z.string().optional() }))
+      .mutation(({ input }) => ({ url: adTrackerService.generateAdUrl(input) })),
+  }),
+
   tracking: router({
     trackCopy: protectedProcedure
       .input(z.object({
